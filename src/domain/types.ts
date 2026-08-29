@@ -32,6 +32,7 @@ export interface Account {
   timeZone: string;
   sendingWindow: SendingWindow;
   credentialDirectory: string;
+  lastTestedAt?: string;
 }
 
 export interface ContactInput {

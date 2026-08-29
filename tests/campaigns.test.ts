@@ -74,6 +74,29 @@ describe("campaign rules", () => {
     ]);
   });
 
+  it("refuses to save a campaign when every recipient is excluded", () => {
+    expect(() =>
+      createCampaign(
+        {
+          name: "Product update",
+          subject: "A short update",
+          body: "Hi there",
+          accountIds: ["account-1"],
+          dailyCap: 25,
+          delayMinSeconds: 30,
+          delayMaxSeconds: 45,
+          recipients: [{ email: "blocked@example.com" }],
+          now,
+        },
+        {
+          suppressed: new Set(["blocked@example.com"]),
+          bounced: new Set(),
+          queued: new Set(),
+        },
+      ),
+    ).toThrowError("No eligible recipients remain after safety checks.");
+  });
+
   it("uses readable personalization fallbacks", () => {
     expect(renderMessage("Hi {firstName} from {company}", { email: "ada@example.com" })).toBe(
       "Hi there from your company",

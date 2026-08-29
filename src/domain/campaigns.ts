@@ -69,6 +69,8 @@ export function createCampaign(
     });
   }
 
+  if (recipients.length === 0) throw new Error("No eligible recipients remain after safety checks.");
+
   return {
     campaign: {
       id: randomUUID(),

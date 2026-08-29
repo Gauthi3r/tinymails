@@ -78,6 +78,9 @@ describe("Google connection API", () => {
         message: expect.objectContaining({ to: "sender@example.com", subject: "TinyMails is connected" }),
       },
     ]);
+    expect(await repositories.accounts.get("account-1")).toMatchObject({
+      lastTestedAt: expect.any(String),
+    });
   });
 });
 

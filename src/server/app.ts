@@ -100,6 +100,10 @@ export function createApp(dependencies: AppDependencies) {
       body: "Your Gmail connection is ready. You can now send a careful test campaign from TinyMails.",
     });
     if (result.ok) {
+      await dependencies.repositories.accounts.update(account.id, (record) => ({
+        ...record,
+        lastTestedAt: clock().toISOString(),
+      }));
       response.json(result);
       return;
     }
@@ -150,6 +154,11 @@ export function createApp(dependencies: AppDependencies) {
 
   app.post("/api/campaigns", asyncRoute(async (request, response) => {
     const input = campaignInput(objectBody(request.body), clock().toISOString());
+    const accounts = await dependencies.repositories.accounts.list();
+    const connectedAccountIds = new Set(accounts.map((account) => account.id));
+    if (!input.accountIds.every((id) => connectedAccountIds.has(id))) {
+      throw new PublicError("Choose only connected Gmail accounts.");
+    }
     const campaigns = await dependencies.repositories.campaigns.list();
     const suppressed = new Set(await dependencies.repositories.suppression.list());
     const bounced = new Set(
@@ -166,14 +175,33 @@ export function createApp(dependencies: AppDependencies) {
           : [],
       ),
     );
-    const result = createCampaign(input, { suppressed, bounced, queued });
+    let result: ReturnType<typeof createCampaign>;
+    try {
+      result = createCampaign(input, { suppressed, bounced, queued });
+    } catch (error) {
+      if (error instanceof Error) throw new PublicError(error.message);
+      throw error;
+    }
     await dependencies.repositories.campaigns.save(result.campaign);
     response.status(201).json(result);
   }));
 
   app.post("/api/campaigns/:id/start", asyncRoute(async (request, response) => {
+    const campaignId = firstParam(request.params.id);
+    const existing = await dependencies.repositories.campaigns.get(campaignId);
+    if (!existing) {
+      response.status(404).json({ error: "Campaign not found." });
+      return;
+    }
+    const assignedAccounts = await Promise.all(existing.accountIds.map((id) => dependencies.repositories.accounts.get(id)));
+    if (assignedAccounts.some((account) => !account?.lastTestedAt)) {
+      response.status(409).json({
+        error: "Send a test email from every assigned Gmail account before starting.",
+      });
+      return;
+    }
     const campaign = await dependencies.repositories.campaigns.update(
-      firstParam(request.params.id),
+      campaignId,
       (record) => ({ ...record, status: "running" }),
     );
     if (!campaign) {
@@ -265,11 +293,21 @@ function campaignInput(body: Record<string, unknown>, now: string) {
       throw new PublicError(`Campaign ${field} is required.`);
     }
   }
-  if (!Array.isArray(body.accountIds) || !body.accountIds.every((id) => typeof id === "string")) {
+  if (
+    !Array.isArray(body.accountIds) ||
+    body.accountIds.length === 0 ||
+    !body.accountIds.every((id) => typeof id === "string")
+  ) {
     throw new PublicError("Choose at least one Gmail account.");
   }
   if (!Array.isArray(body.recipients) || !body.recipients.every(isContactInput)) {
     throw new PublicError("Recipients must be an array of contacts.");
+  }
+
+  const delayMinSeconds = nonNegativeNumber(body.delayMinSeconds, "minimum delay");
+  const delayMaxSeconds = nonNegativeNumber(body.delayMaxSeconds, "maximum delay");
+  if (delayMaxSeconds < delayMinSeconds) {
+    throw new PublicError("Campaign maximum delay cannot be below its minimum delay.");
   }
 
   return {
@@ -278,8 +316,8 @@ function campaignInput(body: Record<string, unknown>, now: string) {
     body: body.body as string,
     accountIds: body.accountIds,
     dailyCap: positiveNumber(body.dailyCap, "daily cap"),
-    delayMinSeconds: nonNegativeNumber(body.delayMinSeconds, "minimum delay"),
-    delayMaxSeconds: nonNegativeNumber(body.delayMaxSeconds, "maximum delay"),
+    delayMinSeconds,
+    delayMaxSeconds,
     recipients: body.recipients,
     now,
   };
