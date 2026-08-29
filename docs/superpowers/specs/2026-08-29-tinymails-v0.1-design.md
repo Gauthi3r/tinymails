@@ -1,7 +1,7 @@
 # TinyMails v0.1 design
 
 Date: 2026-08-29
-Status: Approved direction, pending written-spec review
+Status: Approved direction, implementation in progress
 
 ## Product definition
 
@@ -59,7 +59,8 @@ TinyMails remains a single-user local web application.
 - Frontend: React 19, TypeScript, Vite, Tailwind CSS 4, Base UI.
 - Design language: selected `oa-design` tokens and source recipes.
 - Local server: Node.js and Express, bound only to `127.0.0.1`.
-- Gmail adapter: the Google Workspace CLI, invoked as a child process with explicit per-account configuration directories and exact OAuth scopes.
+- Gmail adapter: Google's supported Node.js auth library and Gmail REST API, with account-specific client metadata and credentials.
+- Secret storage: the operating-system credential vault through the native keyring adapter.
 - Persistence: small JSON and text files written atomically in the TinyMails application-data directory.
 - Browser communication: local JSON API. Running campaign status may continue with short polling in v0.1.
 
@@ -69,14 +70,13 @@ The Gmail adapter is isolated behind a small interface:
 
 ```ts
 interface GmailAccountAdapter {
-  connect(input: OAuthClientInput, capabilities: GmailCapability[]): Promise<AccountProfile>
-  status(accountId: string): Promise<AccountStatus>
-  send(accountId: string, message: OutgoingMessage): Promise<SendResult>
-  listInbound(accountId: string, cursor?: InboxCursor): Promise<InboundResult>
+  status(account: Account): Promise<AccountStatus>
+  send(account: Account, message: OutgoingMessage): Promise<SendResult>
+  listInbound(account: Account, cursor?: InboxCursor): Promise<InboundResult>
 }
 ```
 
-Campaign, lead, and suppression code depends on this interface rather than calling a process directly. Tests use a fake adapter and never contact Gmail.
+Campaign, lead, and suppression code depends on this interface rather than importing Google APIs directly. OAuth orchestration uses separate provider and credential-vault ports. Tests use fakes and never contact Gmail.
 
 ## Gmail connection
 
@@ -88,11 +88,12 @@ The account setup flow is:
 2. Link directly to the Gmail API, OAuth branding, audience, and credential pages.
 3. Explain Internal and External project choices without claiming that setup bypasses Google's policies.
 4. Ask the user to create a Desktop OAuth client and download its JSON file.
-5. Accept that file through a local drag-and-drop field.
-6. Store it in the local application-data directory, never the repository.
-7. Open Google's browser authorization flow.
-8. Read the authorized email address from OAuth identity data.
-9. Confirm the account and send a test message.
+5. Accept that file through a local file picker.
+6. Validate it as a Desktop client and keep it in the account-specific local application-data directory with user-only permissions.
+7. Open Google's browser authorization flow with PKCE and a ten-minute state-bound session.
+8. Store returned tokens in the operating-system credential vault rather than a JSON data file.
+9. Read the verified account email from Google's OpenID user-info endpoint.
+10. Confirm the account and send a self-addressed test message.
 
 Capabilities use incremental authorization:
 
@@ -167,7 +168,7 @@ Settings contains:
 - Gmail authorization failure pauses affected work without consuming recipients.
 - A send failure records a bounded error message and returns the lead to the available pool unless Gmail confirms delivery.
 - Invalid CSV rows appear in import review and can be exported for correction.
-- An interrupted process converts in-flight recipients back to pending on startup.
+- An interrupted in-flight recipient becomes failed with an unknown-delivery warning so TinyMails cannot silently send it twice.
 - Suppression changes take effect immediately, including during a running campaign.
 - The UI uses persistent notices for unresolved states and short-lived toasts for completed events.
 - Error copy names the cause and the action available to the user.

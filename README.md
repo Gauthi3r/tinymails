@@ -2,15 +2,17 @@
 
 TinyMails is a local-first Gmail mail merge for small, permission-based campaigns. It keeps contacts, templates, sending history, and account configuration on your computer.
 
-This repository contains the new public foundation. Campaign rules, atomic local storage, the loopback API, and the OA-based app shell work today. Bring-your-own Google OAuth setup and the full campaign composer are the next milestones. TinyMails cannot send through Gmail until that adapter lands.
+This repository contains the public v0.1 work in progress. Campaign rules, atomic local storage, the OA-based app shell, bring-your-own Google OAuth, and Gmail delivery work today. The visual campaign composer and release launcher are still being built.
 
 ## What it does
 
 - Imports and enriches contacts without overwriting known values.
 - Derives contact status from campaign history and the do-not-contact list.
 - Excludes duplicates, bounces, suppressed addresses, and contacts already queued elsewhere.
-- Persists campaign state after each send and recovers interrupted recipients to pending.
+- Persists campaign state after each send and flags interrupted deliveries for manual review.
 - Enforces account caps, sending windows, and delays at the Gmail boundary.
+- Connects a user-owned Google Desktop OAuth client with send-only access.
+- Stores Google tokens in the operating-system credential vault.
 - Keeps Gmail access behind an adapter with no network calls in tests.
 
 TinyMails does not insert tracking pixels, host contact data, write email copy with AI, automate follow-ups, or provide a managed OAuth application.
@@ -20,7 +22,9 @@ TinyMails does not insert tracking pixels, host contact data, write email copy w
 - Node.js 22 or newer
 - npm 10 or newer
 
-Gmail support will require a Google Cloud project and Desktop OAuth client that you control. That setup is not part of the current foundation release.
+Gmail support requires a Google Cloud project and Desktop OAuth client that you control. TinyMails asks only for basic identity and `gmail.send`; it does not request inbox access.
+
+On Linux, the native credential vault needs a Secret Service-compatible keyring available in the user session. macOS uses Keychain and Windows uses Credential Manager.
 
 ## Run it locally
 
@@ -33,6 +37,21 @@ npm run serve
 ```
 
 Open `http://127.0.0.1:3210`.
+
+## Connect Gmail
+
+TinyMails does not ship a shared OAuth client. Each user creates one in a Google Cloud project they control:
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create or choose a project.
+2. Configure the [Google Auth Platform](https://console.cloud.google.com/auth/overview). For an External app in Testing mode, add the Gmail address you will connect as a test user. Internal apps are available only to eligible Google Workspace organizations.
+3. Enable the [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
+4. Open [Clients](https://console.cloud.google.com/auth/clients), create an OAuth client with application type **Desktop app**, and download its JSON file.
+5. Start TinyMails, open **Settings**, choose that JSON file, and finish consent in the Google window.
+6. Use **Test** beside the connected account before creating a campaign.
+
+Google can show an unverified-app notice for a personal Testing configuration. Testing-mode authorization for an External app may also expire after seven days, requiring a reconnect. Publishing and verifying a shared OAuth app is a separate distribution step; bring-your-own OAuth does not bypass Google's consent or user rules.
+
+Client metadata stays under the local TinyMails data directory with user-only permissions. Tokens go to the operating-system credential vault. Neither is uploaded to a TinyMails service.
 
 For UI development, run the API and Vite in separate terminals:
 
@@ -72,10 +91,9 @@ Only contact people who expect to hear from you. Keep lists small, honor removal
 
 The approved [v0.1 design](docs/superpowers/specs/2026-08-29-tinymails-v0.1-design.md) covers:
 
-1. Bring-your-own Google OAuth onboarding and test sends.
-2. CSV import review and the four-step campaign composer.
-3. Templates, backups, campaign detail, and optional reply tracking.
-4. Release packaging and a one-command local launcher.
+1. CSV import review and the four-step campaign composer.
+2. Templates, backups, campaign detail, and optional reply tracking.
+3. Release packaging and a one-command local launcher.
 
 ## License
 

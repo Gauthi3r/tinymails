@@ -117,10 +117,15 @@ export function SettingsPage({
           <div>
             <h3 className="text-base font-semibold tracking-[-0.02em]">Use your own Google OAuth client</h3>
             <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-muted-foreground">
-              <li>Enable the Gmail API and configure the OAuth consent screen.</li>
+              <li>Create a Google Cloud project and configure its audience and test users.</li>
+              <li>Enable the Gmail API for that project.</li>
               <li>Create an OAuth client with application type Desktop app.</li>
               <li>Download its JSON file, then choose it here.</li>
             </ol>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              TinyMails requests your verified email and <code className="font-mono">gmail.send</code> only. Inbox
+              reading is off.
+            </p>
             <a
               href="https://console.cloud.google.com/apis/credentials"
               target="_blank"
