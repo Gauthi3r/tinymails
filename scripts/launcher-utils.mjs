@@ -24,3 +24,13 @@ export async function probeLoopback(baseUrl, fetcher = fetch) {
     return "free";
   }
 }
+
+export function occupiedPortError(state, port) {
+  if (state === "tinymails") {
+    return `Port ${port} is already running TinyMails, but this launcher cannot verify its data directory. Stop it or set TINYMAILS_PORT to another port.`;
+  }
+  if (state === "occupied") {
+    return `Port ${port} is already used by another local service. Set TINYMAILS_PORT to another port.`;
+  }
+  return null;
+}

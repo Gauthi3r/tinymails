@@ -75,6 +75,7 @@ function connectionApi(account: PublicAccount) {
     sendTestEmail: vi.fn(async () => ({ ok: true as const, messageId: "message-1" })),
     importLeads: vi.fn(),
     createCampaign: vi.fn(),
+    testCampaign: vi.fn(),
     startCampaign: vi.fn(),
     pauseCampaign: vi.fn(),
     suppressEmails: vi.fn(),

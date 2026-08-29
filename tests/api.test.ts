@@ -13,14 +13,16 @@ const now = new Date("2026-08-29T10:00:00.000Z");
 describe("local API", () => {
   let repositories: Repositories;
   let app: ReturnType<typeof createApp>;
+  let gmail: FakeGmailAccountAdapter;
 
   beforeEach(async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "tinymails-api-"));
     repositories = createRepositories(dataDir);
     await repositories.accounts.save(accountFixture());
+    gmail = new FakeGmailAccountAdapter();
     app = createApp({
       repositories,
-      gmail: new FakeGmailAccountAdapter(),
+      gmail,
       dataDir,
       clock: () => now,
     });
@@ -68,11 +70,40 @@ describe("local API", () => {
     ]);
   });
 
+  it("admits a recipient to only one campaign when requests arrive together", async () => {
+    const campaign = {
+      name: "Product update",
+      subject: "A short update",
+      body: "Hi there",
+      accountIds: ["account-1"],
+      dailyCap: 25,
+      delayMinSeconds: 30,
+      delayMaxSeconds: 45,
+      recipients: [{ email: "ready@example.com" }],
+    };
+
+    const responses = await Promise.all([
+      request(app).post("/api/campaigns").send({ ...campaign, name: "First" }),
+      request(app).post("/api/campaigns").send({ ...campaign, name: "Second" }),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 400]);
+    const saved = await repositories.campaigns.list();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].recipients).toHaveLength(1);
+  });
+
   it("does not return local credential directories to the browser", async () => {
+    const hiddenField = ["client", "secret"].join("_");
+    await repositories.accounts.save({
+      ...accountFixture(),
+      [hiddenField]: "must-not-leave-the-server",
+    } as Account);
     const response = await request(app).get("/api/accounts").expect(200);
 
     expect(response.body.accounts[0]).toMatchObject({ id: "account-1", email: "sender@example.com" });
     expect(response.body.accounts[0]).not.toHaveProperty("credentialDirectory");
+    expect(response.body.accounts[0]).not.toHaveProperty(hiddenField);
     expect(JSON.stringify(response.body)).not.toContain("/tmp/credentials");
   });
 
@@ -117,6 +148,46 @@ describe("local API", () => {
       .expect(409, { error: "Send a test email from every assigned Gmail account before starting." });
   });
 
+  it("tests the personalized campaign revision before allowing it to start", async () => {
+    const created = await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Product update",
+        subject: "A note for {company}",
+        body: "Hi {firstName}, this is the preview.",
+        accountIds: ["account-1"],
+        dailyCap: 25,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com", firstName: "Ada", company: "Example" }],
+      })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/campaigns/${created.body.campaign.id}/start`)
+      .expect(409);
+    const tested = await request(app)
+      .post(`/api/campaigns/${created.body.campaign.id}/test-send`)
+      .send({})
+      .expect(200);
+
+    expect(gmail.sent).toEqual([
+      expect.objectContaining({
+        accountId: "account-1",
+        message: {
+          to: "sender@example.com",
+          subject: "A note for Example",
+          body: "Hi Ada, this is the preview.",
+        },
+      }),
+    ]);
+    expect(tested.body.campaign.testedAt).toBe(now.toISOString());
+    expect((await repositories.accounts.get("account-1"))?.lastTestedAt).toBe(now.toISOString());
+    await request(app)
+      .post(`/api/campaigns/${created.body.campaign.id}/start`)
+      .expect(202);
+  });
+
   it("returns a bounded validation error for malformed imports", async () => {
     const response = await request(app)
       .post("/api/leads/import")
@@ -127,6 +198,11 @@ describe("local API", () => {
   });
 
   it("exports a portable backup without credential paths", async () => {
+    const hiddenField = ["client", "secret"].join("_");
+    await repositories.accounts.save({
+      ...accountFixture(),
+      [hiddenField]: "must-not-leave-the-server",
+    } as Account);
     await repositories.leads.update((leads) => [
       ...leads,
       { email: "ada@example.com", firstName: "Ada", source: "Beta", addedAt: now.toISOString() },
@@ -145,6 +221,8 @@ describe("local API", () => {
       },
     });
     expect(JSON.stringify(response.body)).not.toContain("credentialDirectory");
+    expect(JSON.stringify(response.body)).not.toContain(hiddenField);
+    expect(JSON.stringify(response.body)).not.toContain("must-not-leave-the-server");
     expect(JSON.stringify(response.body)).not.toContain("/tmp/credentials");
   });
 

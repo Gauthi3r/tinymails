@@ -41,6 +41,31 @@ describe("campaign composer", () => {
     expect(await screen.findByText("Beta note")).toBeVisible();
   });
 
+  it("shows the server's final recipient count before closing the review", async () => {
+    const api = fakeApi();
+    const saved = campaignFixture();
+    saved.recipients = saved.recipients.slice(0, 1);
+    api.createCampaign.mockResolvedValue({
+      campaign: saved,
+      excluded: [{ email: "grace@example.org", reason: "do-not-contact" }],
+    });
+    render(<CampaignsPage api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue to Write" }));
+    await userEvent.type(screen.getByLabelText("Campaign name"), "Beta note");
+    await userEvent.type(screen.getByLabelText("Subject"), "Hello");
+    await userEvent.type(screen.getByLabelText("Message"), "Hi there");
+    await userEvent.click(screen.getByRole("button", { name: "Continue to Delivery" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue to Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save campaign" }));
+
+    expect(await screen.findByText(/1 recipient was excluded by the final safety checks/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Review" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "View saved campaign" }));
+    expect(await screen.findByText("Beta note")).toBeVisible();
+  });
+
   it("starts, pauses, and opens recipient-level campaign detail", async () => {
     const campaign = campaignFixture();
     const api = fakeApi([campaign]);
@@ -49,7 +74,9 @@ describe("campaign composer", () => {
     await userEvent.click(await screen.findByRole("button", { name: "View Beta note" }));
     expect(screen.getByText("ada@example.com")).toBeVisible();
     expect(screen.getAllByText("pending").length).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole("button", { name: "Start Beta note" }));
+    await userEvent.click(screen.getByRole("button", { name: "Test Beta note" }));
+    expect(api.testCampaign).toHaveBeenCalledWith("campaign-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Start Beta note" }));
     expect(api.startCampaign).toHaveBeenCalledWith("campaign-1");
     await userEvent.click(await screen.findByRole("button", { name: "Pause Beta note" }));
     expect(api.pauseCampaign).toHaveBeenCalledWith("campaign-1");
@@ -111,7 +138,8 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
     sendTestEmail: vi.fn(),
     importLeads: vi.fn(),
     createCampaign: vi.fn(async () => ({ campaign, excluded: [] })),
-    startCampaign: vi.fn(async () => ({ ...campaign, status: "running" as const })),
+    testCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z" })),
+    startCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z", status: "running" as const })),
     pauseCampaign: vi.fn(async () => campaign),
     suppressEmails: vi.fn(),
     getTemplates: vi.fn(async () => []),

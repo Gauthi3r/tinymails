@@ -29,6 +29,7 @@ interface CampaignRunnerDependencies {
 
 export class CampaignRunner {
   private readonly activeCampaigns = new Set<string>();
+  private readonly accountTails = new Map<string, Promise<void>>();
   private readonly clock: () => Date;
   private readonly delay: (milliseconds: number) => Promise<void>;
   private readonly random: () => number;
@@ -75,64 +76,89 @@ export class CampaignRunner {
         return;
       }
 
-      const now = this.clock();
-      if (!(await this.canSend(campaign, account, now))) {
-        await this.dependencies.campaigns.update(campaignId, (latest) => ({
-          ...latest,
-          status: "paused",
-        }));
-        return;
+      const outcome = await this.withAccountLock(account.id, () =>
+        this.processRecipient(campaignId, recipient.email, account),
+      );
+      if (!outcome.continue) return;
+      if (outcome.campaign) {
+        const seconds = delaySeconds(outcome.campaign, account, this.random());
+        await this.delay(seconds * 1_000);
       }
+    }
+  }
 
-      if (await this.dependencies.suppression.has(recipient.email)) {
-        await this.skipSuppressed(campaignId, recipient.email);
-        continue;
+  private async processRecipient(
+    campaignId: string,
+    email: string,
+    account: Account,
+  ): Promise<{ continue: boolean; campaign?: Campaign }> {
+    const current = await this.dependencies.campaigns.get(campaignId);
+    const currentRecipient = current ? findRecipient(current, email) : undefined;
+    if (!current || current.status !== "running") return { continue: false };
+    if (currentRecipient?.status !== "pending") return { continue: true };
+
+    const now = this.clock();
+    if (!(await this.canSend(current, account, now))) {
+      await this.dependencies.campaigns.update(campaignId, (latest) => ({
+        ...latest,
+        status: "paused",
+      }));
+      return { continue: false };
+    }
+
+    if (await this.dependencies.suppression.has(email)) {
+      await this.skipSuppressed(campaignId, email);
+      return { continue: true };
+    }
+
+    const claimed = await this.dependencies.campaigns.update(campaignId, (latest) => {
+      if (latest.status !== "running") return latest;
+      const target = findRecipient(latest, email);
+      if (target?.status === "pending") {
+        target.status = "sending";
+        delete target.error;
       }
+      return latest;
+    });
+    const claimedRecipient = claimed ? findRecipient(claimed, email) : null;
+    if (!claimed || claimed.status !== "running" || claimedRecipient?.status !== "sending") {
+      return { continue: false };
+    }
 
-      const claimed = await this.dependencies.campaigns.update(campaignId, (latest) => {
-        if (latest.status !== "running") return latest;
-        const target = findRecipient(latest, recipient.email);
-        if (target?.status === "pending") {
-          target.status = "sending";
-          delete target.error;
+    if (await this.dependencies.suppression.has(email)) {
+      await this.skipSuppressed(campaignId, email);
+      return { continue: true };
+    }
+
+    const finalSafetyError = await this.finalSafetyError(campaignId, email);
+    if (finalSafetyError) {
+      await this.skipRecipient(campaignId, email, finalSafetyError);
+      return { continue: true };
+    }
+
+    let result: SendResult;
+    try {
+      result = await this.dependencies.gmail.send(account, {
+        to: claimedRecipient.email,
+        subject: renderMessage(claimed.subject, claimedRecipient),
+        body: renderMessage(claimed.body, claimedRecipient),
+      });
+    } catch {
+      await this.dependencies.campaigns.update(campaignId, (latest) => {
+        const target = findRecipient(latest, email);
+        if (target) {
+          target.status = "failed";
+          target.failedAt = now.toISOString();
+          target.error = "Delivery result is unknown. Check Gmail Sent before retrying.";
         }
+        latest.status = "paused";
         return latest;
       });
-      const claimedRecipient = claimed ? findRecipient(claimed, recipient.email) : null;
-      if (!claimed || claimed.status !== "running" || claimedRecipient?.status !== "sending") return;
-
-      if (await this.dependencies.suppression.has(recipient.email)) {
-        await this.skipSuppressed(campaignId, recipient.email);
-        continue;
-      }
-
-      let result: SendResult;
-      try {
-        result = await this.dependencies.gmail.send(account, {
-          to: claimedRecipient.email,
-          subject: renderMessage(claimed.subject, claimedRecipient),
-          body: renderMessage(claimed.body, claimedRecipient),
-        });
-      } catch {
-        await this.dependencies.campaigns.update(campaignId, (latest) => {
-          const target = findRecipient(latest, recipient.email);
-          if (target) {
-            target.status = "failed";
-            target.failedAt = now.toISOString();
-            target.error = "Delivery result is unknown. Check Gmail Sent before retrying.";
-          }
-          latest.status = "paused";
-          return latest;
-        });
-        return;
-      }
-
-      const shouldContinue = await this.applyResult(campaignId, recipient.email, result, now);
-      if (!shouldContinue) return;
-
-      const seconds = delaySeconds(claimed, account, this.random());
-      await this.delay(seconds * 1_000);
+      return { continue: false };
     }
+
+    const shouldContinue = await this.applyResult(campaignId, email, result, now);
+    return shouldContinue ? { continue: true, campaign: claimed } : { continue: false };
   }
 
   private async canSend(campaign: Campaign, account: Account, now: Date): Promise<boolean> {
@@ -173,14 +199,56 @@ export class CampaignRunner {
   }
 
   private async skipSuppressed(campaignId: string, email: string): Promise<void> {
+    await this.skipRecipient(campaignId, email, "Added to do-not-contact before send.");
+  }
+
+  private async skipRecipient(campaignId: string, email: string, error: string): Promise<void> {
     await this.dependencies.campaigns.update(campaignId, (campaign) => {
       const recipient = findRecipient(campaign, email);
       if (recipient) {
         recipient.status = "skipped";
-        recipient.error = "Added to do-not-contact before send.";
+        recipient.error = error;
       }
       return campaign;
     });
+  }
+
+  private async finalSafetyError(campaignId: string, email: string): Promise<string | null> {
+    const campaigns = await this.dependencies.campaigns.list();
+    const others = campaigns.filter((campaign) => campaign.id !== campaignId);
+    const matching = others.flatMap((campaign) =>
+      campaign.recipients
+        .filter((recipient) => recipient.email === email)
+        .map((recipient) => ({ campaignId: campaign.id, recipient })),
+    );
+    if (matching.some(({ recipient }) => recipient.bouncedAt)) return "Bounced before send.";
+    if (matching.some(({ recipient }) => recipient.status === "sent")) {
+      return "Already contacted by another campaign.";
+    }
+    if (
+      matching.some(
+        ({ campaignId: otherId, recipient }) => recipient.status === "sending" && otherId < campaignId,
+      )
+    ) {
+      return "Already being sent by another campaign.";
+    }
+    return null;
+  }
+
+  private async withAccountLock<T>(accountId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.accountTails.get(accountId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.accountTails.set(accountId, current);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.accountTails.get(accountId) === current) this.accountTails.delete(accountId);
+    }
   }
 }
 

@@ -125,6 +125,33 @@ describe("Google OAuth sessions", () => {
     expect(await vault.get("account-2")).toMatchObject({ refreshToken: "second-refresh-token" });
   });
 
+  it("reconnects an existing Gmail identity without creating a second account", async () => {
+    await service.start(desktopClient(), "http://127.0.0.1:3210/api/oauth/google/callback");
+    await service.finish(provider.authorizations[0].state, "authorization-code");
+    const original = await repositories.accounts.get("account-1");
+    expect(original).not.toBeNull();
+    await repositories.accounts.save({
+      ...original!,
+      lastTestedAt: "2026-08-29T09:00:00.000Z",
+    });
+    provider.identity.tokens = { refreshToken: "replacement-refresh-token" };
+
+    const reconnected = await service.start(
+      desktopClient(),
+      "http://127.0.0.1:3210/api/oauth/google/callback",
+    );
+    const result = await service.finish(provider.authorizations[1].state, "authorization-code");
+
+    expect(result.accountId).toBe("account-1");
+    expect(await repositories.accounts.list()).toHaveLength(1);
+    expect(await vault.get("account-1")).toMatchObject({ refreshToken: "replacement-refresh-token" });
+    expect(await repositories.accounts.get("account-1")).not.toHaveProperty("lastTestedAt");
+    expect(service.status(reconnected.sessionId)).toEqual({
+      status: "connected",
+      account: expect.objectContaining({ id: "account-1", email: "sender@example.com" }),
+    });
+  });
+
   it("records a browser-safe failure without exposing the provider error", async () => {
     const started = await service.start(desktopClient(), "http://127.0.0.1:3210/api/oauth/google/callback");
     provider.exchangeError = new Error("raw provider response with private detail");

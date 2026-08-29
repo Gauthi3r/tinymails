@@ -42,7 +42,7 @@ export function parseCsv(input: string): CsvTable {
   const parsed: CsvRow[] = [];
   let values: string[] = [];
   let field = "";
-  let inQuotes = false;
+  let fieldState: "unquoted" | "quoted" | "after-quote" = "unquoted";
   let line = 1;
   let rowLine = 1;
 
@@ -51,36 +51,43 @@ export function parseCsv(input: string): CsvTable {
     if (values.some((value) => value.trim() !== "")) parsed.push({ line: rowLine, values });
     values = [];
     field = "";
+    fieldState = "unquoted";
   };
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
     if (character === '"') {
-      if (inQuotes && text[index + 1] === '"') {
+      if (fieldState === "quoted" && text[index + 1] === '"') {
         field += '"';
         index += 1;
+      } else if (fieldState === "quoted") {
+        fieldState = "after-quote";
+      } else if (fieldState === "unquoted" && field.length === 0) {
+        fieldState = "quoted";
       } else {
-        inQuotes = !inQuotes;
+        throw invalidQuotedField(line);
       }
       continue;
     }
-    if (character === "," && !inQuotes) {
+    if (character === "," && fieldState !== "quoted") {
       values.push(field);
       field = "";
+      fieldState = "unquoted";
       continue;
     }
-    if ((character === "\n" || character === "\r") && !inQuotes) {
+    if ((character === "\n" || character === "\r") && fieldState !== "quoted") {
       finishRow();
       if (character === "\r" && text[index + 1] === "\n") index += 1;
       line += 1;
       rowLine = line;
       continue;
     }
+    if (fieldState === "after-quote") throw invalidQuotedField(line);
     if (character === "\n") line += 1;
     field += character;
   }
 
-  if (inQuotes) throw new CsvParseError("The CSV ends inside a quoted field.");
+  if (fieldState === "quoted") throw new CsvParseError("The CSV ends inside a quoted field.");
   finishRow();
   const header = parsed.shift();
   if (!header || header.values.every((value) => !value.trim())) {
@@ -90,6 +97,10 @@ export function parseCsv(input: string): CsvTable {
     headers: header.values.map((value) => value.trim()),
     rows: parsed,
   };
+}
+
+function invalidQuotedField(line: number): CsvParseError {
+  return new CsvParseError(`The CSV has an invalid quoted field on line ${line}.`);
 }
 
 export function defaultLeadMapping(headers: string[]): LeadColumnMapping {

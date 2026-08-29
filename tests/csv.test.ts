@@ -43,4 +43,16 @@ describe("CSV import review", () => {
       new CsvParseError("The CSV ends inside a quoted field."),
     );
   });
+
+  it("rejects quotes inside an unquoted field", () => {
+    expect(() => parseCsv('email,company\nperson@example.com,Acme"North')).toThrowError(
+      new CsvParseError("The CSV has an invalid quoted field on line 2."),
+    );
+  });
+
+  it("rejects characters after a closing quote", () => {
+    expect(() => parseCsv('email,company\nperson@example.com,"Acme"North')).toThrowError(
+      new CsvParseError("The CSV has an invalid quoted field on line 2."),
+    );
+  });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { createCampaign } from "../domain/campaigns";
+import { createCampaign, renderMessage } from "../domain/campaigns";
 import { deriveLeadStatus, mergeLeads } from "../domain/leads";
 import type { Account, ContactInput } from "../domain/types";
 import type { GmailAccountAdapter } from "../gmail/adapter";
@@ -160,30 +160,31 @@ export function createApp(dependencies: AppDependencies) {
     if (!input.accountIds.every((id) => connectedAccountIds.has(id))) {
       throw new PublicError("Choose only connected Gmail accounts.");
     }
-    const campaigns = await dependencies.repositories.campaigns.list();
     const suppressed = new Set(await dependencies.repositories.suppression.list());
-    const bounced = new Set(
-      campaigns.flatMap((campaign) =>
-        campaign.recipients.filter((recipient) => recipient.bouncedAt).map((recipient) => recipient.email),
-      ),
-    );
-    const queued = new Set(
-      campaigns.flatMap((campaign) =>
-        campaign.status === "running" || campaign.status === "paused"
-          ? campaign.recipients
-              .filter((recipient) => recipient.status === "pending" || recipient.status === "sending")
-              .map((recipient) => recipient.email)
-          : [],
-      ),
-    );
     let result: ReturnType<typeof createCampaign>;
     try {
-      result = createCampaign(input, { suppressed, bounced, queued });
+      result = await dependencies.repositories.campaigns.createFromSnapshot((campaigns) => {
+        const bounced = new Set(
+          campaigns.flatMap((campaign) =>
+            campaign.recipients.filter((recipient) => recipient.bouncedAt).map((recipient) => recipient.email),
+          ),
+        );
+        const queued = new Set(
+          campaigns.flatMap((campaign) =>
+            campaign.status === "running" || campaign.status === "paused"
+              ? campaign.recipients
+                  .filter((recipient) => recipient.status === "pending" || recipient.status === "sending")
+                  .map((recipient) => recipient.email)
+              : [],
+          ),
+        );
+        const created = createCampaign(input, { suppressed, bounced, queued });
+        return { record: created.campaign, result: created };
+      });
     } catch (error) {
       if (error instanceof Error) throw new PublicError(error.message);
       throw error;
     }
-    await dependencies.repositories.campaigns.save(result.campaign);
     response.status(201).json(result);
   }));
 
@@ -201,6 +202,12 @@ export function createApp(dependencies: AppDependencies) {
       });
       return;
     }
+    if (!existing.testedAt) {
+      response.status(409).json({
+        error: "Send this campaign's personalized preview before starting.",
+      });
+      return;
+    }
     const campaign = await dependencies.repositories.campaigns.update(
       campaignId,
       (record) => ({ ...record, status: "running" }),
@@ -215,6 +222,62 @@ export function createApp(dependencies: AppDependencies) {
       });
     });
     response.status(202).json({ campaign });
+  }));
+
+  app.post("/api/campaigns/:id/test-send", asyncRoute(async (request, response) => {
+    const campaignId = firstParam(request.params.id);
+    const campaign = await dependencies.repositories.campaigns.get(campaignId);
+    if (!campaign) {
+      response.status(404).json({ error: "Campaign not found." });
+      return;
+    }
+    if (campaign.status !== "paused") {
+      response.status(409).json({ error: "Only a paused campaign can send a preview." });
+      return;
+    }
+
+    const accounts = await Promise.all(
+      campaign.accountIds.map((id) => dependencies.repositories.accounts.get(id)),
+    );
+    if (accounts.some((account) => !account)) {
+      response.status(409).json({ error: "Reconnect every assigned Gmail account before testing." });
+      return;
+    }
+
+    for (const account of accounts) {
+      if (!account) continue;
+      const recipient = campaign.recipients.find((item) => item.accountId === account.id)
+        ?? campaign.recipients[0];
+      if (!recipient) throw new PublicError("This campaign has no recipient to preview.");
+      let result;
+      try {
+        result = await dependencies.gmail.send(account, {
+          to: account.email,
+          subject: renderMessage(campaign.subject, recipient),
+          body: renderMessage(campaign.body, recipient),
+        });
+      } catch {
+        response.status(503).json({ error: "The campaign preview could not be confirmed." });
+        return;
+      }
+      if (!result.ok) {
+        const status = result.kind === "temporary" ? 503 : result.kind === "auth" ? 409 : 400;
+        response.status(status).json({ error: result.message });
+        return;
+      }
+    }
+
+    const testedAt = clock().toISOString();
+    await Promise.all(
+      accounts.map((account) => account
+        ? dependencies.repositories.accounts.update(account.id, (record) => ({ ...record, lastTestedAt: testedAt }))
+        : null),
+    );
+    const testedCampaign = await dependencies.repositories.campaigns.update(campaignId, (record) => ({
+      ...record,
+      testedAt,
+    }));
+    response.json({ campaign: testedCampaign });
   }));
 
   app.post("/api/campaigns/:id/pause", asyncRoute(async (request, response) => {
@@ -388,8 +451,22 @@ function nonNegativeNumber(value: unknown, label: string): number {
 }
 
 function publicAccount(account: Account) {
-  const { credentialDirectory: _credentialDirectory, ...safe } = account;
-  return safe;
+  return {
+    id: account.id,
+    email: account.email,
+    label: account.label,
+    capabilities: [...account.capabilities],
+    dailyCap: account.dailyCap,
+    delayMinSeconds: account.delayMinSeconds,
+    delayMaxSeconds: account.delayMaxSeconds,
+    timeZone: account.timeZone,
+    sendingWindow: {
+      days: [...account.sendingWindow.days],
+      start: account.sendingWindow.start,
+      end: account.sendingWindow.end,
+    },
+    ...(account.lastTestedAt ? { lastTestedAt: account.lastTestedAt } : {}),
+  };
 }
 
 function firstParam(value: string | string[]): string {

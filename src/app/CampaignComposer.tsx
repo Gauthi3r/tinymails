@@ -33,6 +33,7 @@ export function CampaignComposer({
   const [delayMax, setDelayMax] = useState(45);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedCampaign, setSavedCampaign] = useState<Campaign | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -87,7 +88,14 @@ export function CampaignComposer({
         delayMaxSeconds: delayMax,
         recipients: selected.map(({ email, firstName, company }) => ({ email, firstName, company })),
       });
-      onCreated(result.campaign);
+      if (result.excluded.length > 0) {
+        setSavedCampaign(result.campaign);
+        setMessage(
+          `${result.excluded.length} recipient${result.excluded.length === 1 ? " was" : "s were"} excluded by the final safety checks. The paused campaign has ${result.campaign.recipients.length} recipient${result.campaign.recipients.length === 1 ? "" : "s"}.`,
+        );
+      } else {
+        onCreated(result.campaign);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The campaign could not be saved.");
     } finally {
@@ -187,12 +195,16 @@ export function CampaignComposer({
       </div>
 
       <div className="flex items-center justify-between border-t border-border bg-background px-5 py-4">
-        <Button variant="ghost" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>
+        <Button variant="ghost" disabled={step === 0 || Boolean(savedCampaign)} onClick={() => setStep((current) => Math.max(0, current - 1))}>
           <ChevronLeft className="size-4" aria-hidden="true" /> Back
         </Button>
         {step < 3 ? (
           <Button disabled={!canContinue} onClick={() => setStep((current) => Math.min(3, current + 1))} aria-label={`Continue to ${steps[step + 1]}`}>
             Continue <ChevronRight className="size-4" aria-hidden="true" />
+          </Button>
+        ) : savedCampaign ? (
+          <Button onClick={() => onCreated(savedCampaign)} aria-label="View saved campaign">
+            <Mail className="size-4" aria-hidden="true" /> View saved campaign
           </Button>
         ) : (
           <Button loading={saving} onClick={() => void save()} aria-label="Save campaign">

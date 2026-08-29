@@ -36,6 +36,18 @@ export class CollectionRepository<T extends Identified> {
     await this.queue.run(() => this.store.write(records));
   }
 
+  async createFromSnapshot<R>(
+    create: (records: T[]) => { record: T; result: R },
+  ): Promise<R> {
+    return this.queue.run(async () => {
+      const records = await this.store.read();
+      const created = create(structuredClone(records));
+      records.push(created.record);
+      await this.store.write(records);
+      return structuredClone(created.result);
+    });
+  }
+
   async update(id: string, update: (record: T) => T): Promise<T | null> {
     return this.queue.run(async () => {
       const records = await this.store.read();

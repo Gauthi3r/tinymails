@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserCommand, parsePort, probeLoopback } from "../scripts/launcher-utils.mjs";
+import { browserCommand, occupiedPortError, parsePort, probeLoopback } from "../scripts/launcher-utils.mjs";
 
 describe("local launcher", () => {
   it("accepts a valid loopback port and rejects invalid values", () => {
@@ -27,5 +27,10 @@ describe("local launcher", () => {
     await expect(probeLoopback("http://127.0.0.1:3210", tinyMailsFetch)).resolves.toBe("tinymails");
     await expect(probeLoopback("http://127.0.0.1:3210", otherServiceFetch)).resolves.toBe("occupied");
     await expect(probeLoopback("http://127.0.0.1:3210", refusedFetch)).resolves.toBe("free");
+  });
+
+  it("does not reuse an unverifiable TinyMails process", () => {
+    expect(occupiedPortError("tinymails", 3210)).toContain("cannot verify its data directory");
+    expect(occupiedPortError("free", 3210)).toBeNull();
   });
 });

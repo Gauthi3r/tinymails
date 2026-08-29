@@ -83,6 +83,7 @@ export class GoogleOAuthFlowError extends Error {
 export class GoogleOAuthService {
   private readonly sessions = new Map<string, PendingSession>();
   private readonly sessionIdByState = new Map<string, string>();
+  private accountMutation = Promise.resolve();
   private readonly clock: () => Date;
   private readonly createId: () => string;
   private readonly createSecret: () => string;
@@ -135,27 +136,32 @@ export class GoogleOAuthService {
       });
       const email = normalizeEmail(identity.email);
       if (!email || !identity.tokens.refreshToken) throw new Error("Invalid Google identity");
+      const account = await this.serializeAccountMutation(async () => {
+        const existing = (await this.options.accounts.list()).find((item) => item.email === email);
+        const accountId = existing?.id ?? this.createId();
+        const credentialDirectory = existing?.credentialDirectory ?? join("accounts", accountId);
+        const account: Account = existing
+          ? reconnectAccount(existing)
+          : {
+              id: accountId,
+              email,
+              label: "Gmail",
+              capabilities: ["send"],
+              dailyCap: 25,
+              delayMinSeconds: 30,
+              delayMaxSeconds: 45,
+              timeZone: localTimeZone(),
+              sendingWindow: { days: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" },
+              credentialDirectory,
+            };
 
-      const accountId = this.createId();
-      const credentialDirectory = join("accounts", accountId);
-      const account: Account = {
-        id: accountId,
-        email,
-        label: "Gmail",
-        capabilities: ["send"],
-        dailyCap: 25,
-        delayMinSeconds: 30,
-        delayMaxSeconds: 45,
-        timeZone: localTimeZone(),
-        sendingWindow: { days: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" },
-        credentialDirectory,
-      };
-
-      await writePrivateJson(join(this.options.dataDir, credentialDirectory, "client.json"), session.client);
-      await this.options.vault.set(accountId, identity.tokens);
-      await this.options.accounts.save(account);
+        await writePrivateJson(join(this.options.dataDir, credentialDirectory, "client.json"), session.client);
+        await this.options.vault.set(accountId, identity.tokens);
+        await this.options.accounts.save(account);
+        return account;
+      });
       session.result = { status: "connected", account: publicAccount(account) };
-      return { accountId };
+      return { accountId: account.id };
     } catch {
       session.result = { status: "failed", message: "Google authorization could not be completed." };
       throw new GoogleOAuthFlowError("Google authorization could not be completed.");
@@ -179,6 +185,20 @@ export class GoogleOAuthService {
       status: "expired",
       message: "This Google authorization session expired. Start again.",
     };
+  }
+
+  private async serializeAccountMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.accountMutation;
+    let release!: () => void;
+    this.accountMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
   }
 }
 
@@ -232,8 +252,28 @@ function oauthClient(client: DesktopOAuthClient, redirectUri: string): OAuth2Cli
   return new OAuth2Client({ clientId: client.clientId, clientSecret: client.clientSecret, redirectUri });
 }
 
-function publicAccount({ credentialDirectory: _credentialDirectory, ...account }: Account): PublicAccount {
-  return structuredClone(account);
+function publicAccount(account: Account): PublicAccount {
+  return {
+    id: account.id,
+    email: account.email,
+    label: account.label,
+    capabilities: [...account.capabilities],
+    dailyCap: account.dailyCap,
+    delayMinSeconds: account.delayMinSeconds,
+    delayMaxSeconds: account.delayMaxSeconds,
+    timeZone: account.timeZone,
+    sendingWindow: {
+      days: [...account.sendingWindow.days],
+      start: account.sendingWindow.start,
+      end: account.sendingWindow.end,
+    },
+    ...(account.lastTestedAt ? { lastTestedAt: account.lastTestedAt } : {}),
+  };
+}
+
+function reconnectAccount(account: Account): Account {
+  const { lastTestedAt: _lastTestedAt, ...reconnected } = account;
+  return reconnected;
 }
 
 function invalidSessionError(): GoogleOAuthFlowError {

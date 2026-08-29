@@ -54,6 +54,40 @@ describe("campaign runner", () => {
     expect((await campaigns.get("campaign-1"))?.recipients[0].status).toBe("skipped");
   });
 
+  it("skips a recipient already contacted by another campaign", async () => {
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture(),
+      campaignFixture({
+        id: "prior",
+        status: "done",
+        recipients: [
+          {
+            email: "ready@example.com",
+            accountId: "account-1",
+            status: "sent",
+            sentAt: now.toISOString(),
+          },
+        ],
+      }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => undefined,
+    });
+
+    await runner.run("campaign-1");
+
+    expect(gmail.sent).toEqual([]);
+    expect((await campaigns.get("campaign-1"))?.recipients[0]).toMatchObject({
+      status: "skipped",
+      error: "Already contacted by another campaign.",
+    });
+  });
+
   it("persists the Gmail message ID after a successful send", async () => {
     gmail.queueResult({ ok: true, messageId: "message-1" });
 
@@ -109,6 +143,33 @@ describe("campaign runner", () => {
 
     expect(gmail.sent).toHaveLength(1);
     expect((await campaigns.get("campaign-1"))?.recipients[0].status).toBe("sent");
+  });
+
+  it("shares the account daily cap across campaigns started together", async () => {
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture(),
+      campaignFixture({
+        id: "campaign-2",
+        recipients: [{ email: "second@example.com", accountId: "account-1", status: "pending" }],
+      }),
+    ]);
+    accounts = new MemoryAccountRepository([accountFixture({ dailyCap: 1 })]);
+    gmail.queueResult({ ok: true, messageId: "message-1" });
+    gmail.queueResult({ ok: true, messageId: "message-2" });
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => undefined,
+    });
+
+    await Promise.all([runner.run("campaign-1"), runner.run("campaign-2")]);
+
+    expect(gmail.sent).toHaveLength(1);
+    expect([await campaigns.get("campaign-1"), await campaigns.get("campaign-2")])
+      .toEqual(expect.arrayContaining([expect.objectContaining({ status: "paused" })]));
   });
 
   it("observes a pause before claiming the next recipient", async () => {

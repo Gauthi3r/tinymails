@@ -1,17 +1,16 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { browserCommand, parsePort, probeLoopback } from "./launcher-utils.mjs";
+import { browserCommand, occupiedPortError, parsePort, probeLoopback } from "./launcher-utils.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const port = parsePort(process.env.TINYMAILS_PORT);
 const url = `http://127.0.0.1:${port}`;
 
 const initialState = await probeLoopback(url);
-if (initialState === "tinymails") {
-  openBrowser(url);
-} else if (initialState === "occupied") {
-  throw new Error(`Port ${port} is already used by another local service. Set TINYMAILS_PORT to another port.`);
+const portError = occupiedPortError(initialState, port);
+if (portError) {
+  throw new Error(portError);
 } else {
   await run(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"]);
   const server = spawn(

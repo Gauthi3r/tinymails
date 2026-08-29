@@ -33,6 +33,7 @@ export interface AppApi {
   sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
   importLeads(source: string, leads: Array<Pick<Lead, "email" | "firstName" | "company">>): Promise<MergeLeadsResult>;
   createCampaign(input: Omit<CreateCampaignInput, "now">): Promise<CreateCampaignResult>;
+  testCampaign(campaignId: string): Promise<Campaign>;
   startCampaign(campaignId: string): Promise<Campaign>;
   pauseCampaign(campaignId: string): Promise<Campaign>;
   suppressEmails(emails: string[]): Promise<string[]>;
@@ -68,6 +69,9 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async createCampaign(input) {
       return sendJson(fetcher, "/api/campaigns", input);
+    },
+    async testCampaign(campaignId) {
+      return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/test-send`, {})).campaign;
     },
     async startCampaign(campaignId) {
       return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/start`, {})).campaign;

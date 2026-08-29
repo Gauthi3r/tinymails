@@ -67,6 +67,7 @@ export interface Campaign {
   delayMinSeconds: number;
   delayMaxSeconds: number;
   createdAt: string;
+  testedAt?: string;
   status: CampaignStatus;
   recipients: Recipient[];
 }

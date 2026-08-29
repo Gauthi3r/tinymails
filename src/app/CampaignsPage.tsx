@@ -52,6 +52,19 @@ export function CampaignsPage({ api }: { api: AppApi }) {
     }
   }
 
+  async function testCampaign(campaign: Campaign) {
+    setActionId(campaign.id);
+    setError(null);
+    try {
+      const updated = await api.testCampaign(campaign.id);
+      setCampaigns((current) => (current ?? []).map((record) => record.id === updated.id ? updated : record));
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "The campaign preview could not be sent.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
   return (
     <PageFrame
       eyebrow="Outbox"
@@ -116,9 +129,15 @@ export function CampaignsPage({ api }: { api: AppApi }) {
                         <Pause className="size-3.5" aria-hidden="true" /> Pause
                       </Button>
                     ) : campaign.status === "paused" && campaign.recipients.some((recipient) => recipient.status === "pending") ? (
-                      <Button size="xs" loading={actionId === campaign.id} onClick={() => void changeStatus(campaign, "start")} aria-label={`Start ${campaign.name}`}>
-                        <Play className="size-3.5" aria-hidden="true" /> Start
-                      </Button>
+                      campaign.testedAt ? (
+                        <Button size="xs" loading={actionId === campaign.id} onClick={() => void changeStatus(campaign, "start")} aria-label={`Start ${campaign.name}`}>
+                          <Play className="size-3.5" aria-hidden="true" /> Start
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" size="xs" loading={actionId === campaign.id} onClick={() => void testCampaign(campaign)} aria-label={`Test ${campaign.name}`}>
+                          <Send className="size-3.5" aria-hidden="true" /> Send test
+                        </Button>
+                      )
                     ) : null}
                   </div>
                 </div>
