@@ -3,13 +3,26 @@ import { createCampaign } from "../domain/campaigns";
 import { deriveLeadStatus, mergeLeads } from "../domain/leads";
 import type { Account, ContactInput } from "../domain/types";
 import type { GmailAccountAdapter } from "../gmail/adapter";
+import {
+  GoogleOAuthFlowError,
+  type GoogleOAuthStatus,
+} from "../gmail/google-oauth";
+import { OAuthClientValidationError } from "../gmail/oauth-client";
 import { CampaignRunner } from "./campaign-runner";
 import type { Repositories } from "./repositories";
+
+export interface GoogleOAuthCoordinator {
+  start(clientJson: unknown, redirectUri: string): Promise<{ sessionId: string; authorizationUrl: string }>;
+  finish(oauthState: string, code: string): Promise<{ accountId: string }>;
+  status(sessionId: string): GoogleOAuthStatus;
+}
 
 export interface AppDependencies {
   repositories: Repositories;
   gmail: GmailAccountAdapter;
   dataDir: string;
+  oauth?: GoogleOAuthCoordinator;
+  oauthRedirectUri?: string;
   clock?: () => Date;
 }
 
@@ -36,6 +49,62 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/api/accounts", asyncRoute(async (_request, response) => {
     const accounts = (await dependencies.repositories.accounts.list()).map(publicAccount);
     response.json({ accounts });
+  }));
+
+  app.post("/api/oauth/google/start", asyncRoute(async (request, response) => {
+    const oauth = requireOAuth(dependencies);
+    const body = objectBody(request.body);
+    if (!("client" in body)) throw new PublicError("Choose a Google OAuth client JSON file.");
+    try {
+      response.json(await oauth.start(body.client, dependencies.oauthRedirectUri as string));
+    } catch (error) {
+      if (error instanceof OAuthClientValidationError) throw new PublicError(error.message);
+      throw error;
+    }
+  }));
+
+  app.get("/api/oauth/google/callback", asyncRoute(async (request, response) => {
+    const oauth = requireOAuth(dependencies);
+    const state = singleQuery(request.query.state);
+    const code = singleQuery(request.query.code);
+    if (!state || !code) {
+      response.status(400).type("html").send(oauthResultPage(false));
+      return;
+    }
+    try {
+      await oauth.finish(state, code);
+      response.type("html").send(oauthResultPage(true));
+    } catch (error) {
+      if (error instanceof GoogleOAuthFlowError) {
+        response.status(400).type("html").send(oauthResultPage(false));
+        return;
+      }
+      throw error;
+    }
+  }));
+
+  app.get("/api/oauth/google/sessions/:id", asyncRoute(async (request, response) => {
+    const oauth = requireOAuth(dependencies);
+    response.json(oauth.status(firstParam(request.params.id)));
+  }));
+
+  app.post("/api/accounts/:id/test-send", asyncRoute(async (request, response) => {
+    const account = await dependencies.repositories.accounts.get(firstParam(request.params.id));
+    if (!account) {
+      response.status(404).json({ error: "Gmail account not found." });
+      return;
+    }
+    const result = await dependencies.gmail.send(account, {
+      to: account.email,
+      subject: "TinyMails is connected",
+      body: "Your Gmail connection is ready. You can now send a careful test campaign from TinyMails.",
+    });
+    if (result.ok) {
+      response.json(result);
+      return;
+    }
+    const status = result.kind === "temporary" ? 503 : result.kind === "auth" ? 409 : 400;
+    response.status(status).json({ error: result.message });
   }));
 
   app.get("/api/leads", asyncRoute(async (_request, response) => {
@@ -237,4 +306,30 @@ function publicAccount(account: Account) {
 
 function firstParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function singleQuery(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function requireOAuth(dependencies: AppDependencies): GoogleOAuthCoordinator {
+  if (!dependencies.oauth || !dependencies.oauthRedirectUri) {
+    throw new PublicError("Google OAuth is not configured in this TinyMails process.");
+  }
+  return dependencies.oauth;
+}
+
+function oauthResultPage(connected: boolean): string {
+  const title = connected ? "Gmail is connected" : "Gmail could not be connected";
+  const detail = connected
+    ? "Return to TinyMails. You can close this window."
+    : "Return to TinyMails and start the connection again.";
+  return `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${title}</title></head>
+  <body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:2rem;color:#171717">
+    <h1>${title}</h1><p>${detail}</p>
+    <script>window.close()</script>
+  </body>
+</html>`;
 }
