@@ -76,14 +76,15 @@ export class CampaignRunner {
         return;
       }
 
-      const outcome = await this.withAccountLock(account.id, () =>
-        this.processRecipient(campaignId, recipient.email, account),
-      );
+      const outcome = await this.withAccountLock(account.id, async () => {
+        const result = await this.processRecipient(campaignId, recipient.email, account);
+        if (result.campaign) {
+          const seconds = delaySeconds(result.campaign, account, this.random());
+          await this.delay(seconds * 1_000);
+        }
+        return result;
+      });
       if (!outcome.continue) return;
-      if (outcome.campaign) {
-        const seconds = delaySeconds(outcome.campaign, account, this.random());
-        await this.delay(seconds * 1_000);
-      }
     }
   }
 
@@ -223,17 +224,20 @@ export class CampaignRunner {
     const matching = others.flatMap((campaign) =>
       campaign.recipients
         .filter((recipient) => recipient.email === email)
-        .map((recipient) => ({ campaignId: campaign.id, recipient })),
+        .map((recipient) => ({ campaignId: campaign.id, campaignStatus: campaign.status, recipient })),
     );
     if (matching.some(({ recipient }) => recipient.status === "sent")) {
       return "Already contacted by another campaign.";
     }
     if (
       matching.some(
-        ({ campaignId: otherId, recipient }) => recipient.status === "sending" && otherId < campaignId,
+        ({ campaignId: otherId, campaignStatus, recipient }) =>
+          (campaignStatus === "running" || campaignStatus === "paused") &&
+          (recipient.status === "pending" || recipient.status === "sending") &&
+          otherId < campaignId,
       )
     ) {
-      return "Already being sent by another campaign.";
+      return "Already queued by another campaign.";
     }
     return null;
   }

@@ -203,6 +203,66 @@ describe("campaign runner", () => {
       .toEqual(expect.arrayContaining([expect.objectContaining({ status: "paused" })]));
   });
 
+  it("gives an overlapping queued recipient to the earliest active campaign", async () => {
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture({ id: "campaign-a" }),
+      campaignFixture({ id: "campaign-z" }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => undefined,
+    });
+
+    await runner.run("campaign-z");
+
+    expect(gmail.sent).toEqual([]);
+    expect((await campaigns.get("campaign-z"))?.recipients[0]).toMatchObject({
+      status: "skipped",
+      error: "Already queued by another campaign.",
+    });
+  });
+
+  it("paces sends across campaigns that share a Gmail account", async () => {
+    let releaseDelay!: () => void;
+    let notifyDelayStarted!: () => void;
+    const delayStarted = new Promise<void>((resolve) => {
+      notifyDelayStarted = resolve;
+    });
+    const delayed = new Promise<void>((resolve) => {
+      releaseDelay = resolve;
+    });
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture(),
+      campaignFixture({
+        id: "campaign-2",
+        recipients: [{ email: "second@example.com", accountId: "account-1", status: "pending" }],
+      }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => {
+        notifyDelayStarted();
+        await delayed;
+      },
+    });
+
+    const running = Promise.all([runner.run("campaign-1"), runner.run("campaign-2")]);
+    await delayStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(gmail.sent).toHaveLength(1);
+    releaseDelay();
+    await running;
+    expect(gmail.sent).toHaveLength(2);
+  });
+
   it("observes a pause before claiming the next recipient", async () => {
     let releaseDelay!: () => void;
     let notifyDelayStarted!: () => void;
