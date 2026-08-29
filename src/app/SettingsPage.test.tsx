@@ -78,6 +78,8 @@ function connectionApi(account: PublicAccount) {
     startCampaign: vi.fn(),
     pauseCampaign: vi.fn(),
     suppressEmails: vi.fn(),
+    getTemplates: vi.fn(async () => []),
+    saveTemplate: vi.fn(),
   } satisfies AppApi;
 }
 

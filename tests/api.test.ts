@@ -147,6 +147,22 @@ describe("local API", () => {
     expect(JSON.stringify(response.body)).not.toContain("credentialDirectory");
     expect(JSON.stringify(response.body)).not.toContain("/tmp/credentials");
   });
+
+  it("saves reusable plain-text templates", async () => {
+    const created = await request(app)
+      .post("/api/templates")
+      .send({ name: "Beta hello", subject: "A note for {company}", body: "Hi {firstName}," })
+      .expect(201);
+
+    expect(created.body.template).toMatchObject({
+      name: "Beta hello",
+      subject: "A note for {company}",
+      body: "Hi {firstName},",
+      updatedAt: now.toISOString(),
+    });
+    const listed = await request(app).get("/api/templates").expect(200);
+    expect(listed.body.templates).toEqual([created.body.template]);
+  });
 });
 
 function accountFixture(): Account {

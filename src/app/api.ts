@@ -1,5 +1,5 @@
 import type { CreateCampaignInput, CreateCampaignResult } from "../domain/campaigns";
-import type { Account, Campaign, Lead, LeadStatus, Reply } from "../domain/types";
+import type { Account, Campaign, Lead, LeadStatus, Reply, Template } from "../domain/types";
 import type { MergeLeadsResult } from "../domain/leads";
 
 export type PublicAccount = Omit<Account, "credentialDirectory">;
@@ -36,6 +36,8 @@ export interface AppApi {
   startCampaign(campaignId: string): Promise<Campaign>;
   pauseCampaign(campaignId: string): Promise<Campaign>;
   suppressEmails(emails: string[]): Promise<string[]>;
+  getTemplates(): Promise<Template[]>;
+  saveTemplate(input: Pick<Template, "name" | "subject" | "body">): Promise<Template>;
 }
 
 export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
@@ -75,6 +77,12 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async suppressEmails(emails) {
       return (await sendJson<{ emails: string[] }>(fetcher, "/api/suppression", { emails })).emails;
+    },
+    async getTemplates() {
+      return (await getJson<{ templates: Template[] }>(fetcher, "/api/templates")).templates;
+    },
+    async saveTemplate(input) {
+      return (await sendJson<{ template: Template }>(fetcher, "/api/templates", input)).template;
     },
   };
 }

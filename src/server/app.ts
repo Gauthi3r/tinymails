@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createCampaign } from "../domain/campaigns";
 import { deriveLeadStatus, mergeLeads } from "../domain/leads";
@@ -232,6 +233,22 @@ export function createApp(dependencies: AppDependencies) {
     response.json({ templates: await dependencies.repositories.templates.list() });
   }));
 
+  app.post("/api/templates", asyncRoute(async (request, response) => {
+    const body = objectBody(request.body);
+    const name = requiredString(body.name, "Template name is required.");
+    const subject = requiredString(body.subject, "Template subject is required.");
+    const templateBody = requiredString(body.body, "Template message is required.");
+    const template = {
+      id: randomUUID(),
+      name,
+      subject,
+      body: templateBody,
+      updatedAt: clock().toISOString(),
+    };
+    await dependencies.repositories.templates.save(template);
+    response.status(201).json({ template });
+  }));
+
   app.get("/api/replies", asyncRoute(async (_request, response) => {
     response.json({ replies: await dependencies.repositories.replies.list() });
   }));
@@ -356,6 +373,11 @@ function positiveNumber(value: unknown, label: string): number {
     throw new PublicError(`Campaign ${label} must be greater than zero.`);
   }
   return value;
+}
+
+function requiredString(value: unknown, message: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new PublicError(message);
+  return value.trim();
 }
 
 function nonNegativeNumber(value: unknown, label: string): number {

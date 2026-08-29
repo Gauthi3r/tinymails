@@ -4,7 +4,7 @@ import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
 import { SquircleSurface } from "../components/squircle-card";
 import { renderMessage } from "../domain/personalization";
-import type { Campaign } from "../domain/types";
+import type { Campaign, Template } from "../domain/types";
 import type { AppApi, LeadsResponse, PublicAccount, SettingsResponse } from "./api";
 
 const steps = ["Recipients", "Write", "Delivery", "Review"] as const;
@@ -20,6 +20,7 @@ export function CampaignComposer({
 }) {
   const [leads, setLeads] = useState<LeadsResponse | null>(null);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [step, setStep] = useState(0);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
@@ -35,10 +36,11 @@ export function CampaignComposer({
 
   useEffect(() => {
     let active = true;
-    void Promise.all([api.getLeads(), api.getSettings()]).then(([leadData, settingsData]) => {
+    void Promise.all([api.getLeads(), api.getSettings(), api.getTemplates()]).then(([leadData, settingsData, templateData]) => {
       if (!active) return;
       setLeads(leadData);
       setSettings(settingsData);
+      setTemplates(templateData);
       setSelectedEmails(new Set(leadData.leads.filter((lead) => lead.status === "new").map((lead) => lead.email)));
       setSelectedAccounts(new Set(settingsData.accounts.slice(0, 1).map((account) => account.id)));
     }).catch(() => {
@@ -93,6 +95,17 @@ export function CampaignComposer({
     }
   }
 
+  async function saveTemplate() {
+    if (!name.trim() || !subject.trim() || !body.trim()) return;
+    try {
+      const template = await api.saveTemplate({ name: name.trim(), subject, body });
+      setTemplates((current) => [template, ...current]);
+      setMessage(`Template “${template.name}” saved.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The template could not be saved.");
+    }
+  }
+
   return (
     <SquircleSurface className="overflow-hidden border border-border shadow-[var(--shadow-resting)]">
       <div className="flex items-center justify-between border-b border-border bg-card px-5 py-4">
@@ -136,7 +149,16 @@ export function CampaignComposer({
           />
         ) : null}
         {step === 1 ? (
-          <WriteStep name={name} subject={subject} body={body} setName={setName} setSubject={setSubject} setBody={setBody} />
+          <WriteStep
+            name={name}
+            subject={subject}
+            body={body}
+            templates={templates}
+            setName={setName}
+            setSubject={setSubject}
+            setBody={setBody}
+            onSaveTemplate={() => void saveTemplate()}
+          />
         ) : null}
         {step === 2 ? (
           <DeliveryStep
@@ -226,14 +248,36 @@ function RecipientsStep({ data, available, selected, source, setSource, toggleEm
   );
 }
 
-function WriteStep({ name, subject, body, setName, setSubject, setBody }: {
+function WriteStep({ name, subject, body, templates, setName, setSubject, setBody, onSaveTemplate }: {
   name: string; subject: string; body: string;
+  templates: Template[];
   setName: (value: string) => void; setSubject: (value: string) => void; setBody: (value: string) => void;
+  onSaveTemplate: () => void;
 }) {
   return (
     <div>
       <p className="mt-1 text-sm text-muted-foreground">Plain text stays readable and avoids invisible tracking.</p>
       <div className="mt-5 grid gap-4">
+        {templates.length > 0 ? (
+          <label className="text-xs font-medium text-muted-foreground">
+            Saved template
+            <select
+              aria-label="Saved template"
+              defaultValue=""
+              onChange={(event) => {
+                const template = templates.find((item) => item.id === event.target.value);
+                if (template) {
+                  setSubject(template.subject);
+                  setBody(template.body);
+                }
+              }}
+              className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            >
+              <option value="">Choose a template</option>
+              {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+          </label>
+        ) : null}
         <TextField label="Campaign name" value={name} onChange={setName} placeholder="September beta note" />
         <TextField label="Subject" value={subject} onChange={setSubject} placeholder="A short note for {company}" />
         <label className="text-xs font-medium text-muted-foreground">
@@ -241,6 +285,7 @@ function WriteStep({ name, subject, body, setName, setSubject, setBody }: {
           <textarea aria-label="Message" value={body} onChange={(event) => setBody(event.target.value)} rows={9} placeholder="Hi {firstName}," className="mt-1 w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm leading-6 text-foreground" />
         </label>
         <p className="text-xs text-muted-foreground">Variables: <code className="font-mono">{"{firstName}"}</code> and <code className="font-mono">{"{company}"}</code>. Missing values use readable fallbacks.</p>
+        <div><Button variant="secondary" size="sm" disabled={!name.trim() || !subject.trim() || !body.trim()} onClick={onSaveTemplate}>Save as template</Button></div>
       </div>
     </div>
   );
