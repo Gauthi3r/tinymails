@@ -33,4 +33,13 @@ describe("local data storage", () => {
 
     expect(await store.read()).toEqual({ items: [] });
   });
+
+  it("uses a unique temporary file for overlapping writes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tinymails-store-"));
+    const store = new JsonStore(join(dir, "state.json"), [] as number[]);
+
+    await expect(Promise.all([store.write([1]), store.write([2])])).resolves.toBeDefined();
+    expect([[1], [2]]).toContainEqual(await store.read());
+    expect((await readdir(dir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
 });

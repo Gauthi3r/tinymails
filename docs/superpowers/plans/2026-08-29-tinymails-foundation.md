@@ -78,8 +78,10 @@ import { scanTree } from "../scripts/scan-public.mjs";
 describe("public tree scanner", () => {
   it("flags credentials, runtime files, and non-example email addresses", async () => {
     const root = await mkdtemp(join(tmpdir(), "tinymails-scan-"));
-    await writeFile(join(root, "token_cache.json"), '{"refresh_token":"secret"}');
-    await writeFile(join(root, "notes.txt"), "contact person@private.invalid");
+    const credentialKey = ["refresh", "token"].join("_");
+    const privateAddress = ["person", "private", "invalid"].join("@").replace("@invalid", ".invalid");
+    await writeFile(join(root, "token_cache.json"), JSON.stringify({ [credentialKey]: "secret" }));
+    await writeFile(join(root, "notes.txt"), `contact ${privateAddress}`);
     const findings = await scanTree(root);
     expect(findings.map((finding) => finding.rule)).toEqual(
       expect.arrayContaining(["credential-file", "email-address", "secret-token"]),

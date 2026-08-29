@@ -92,10 +92,23 @@ describe("campaign rules", () => {
       { email: "three@example.com", accountId: "account-2", status: "sent", sentAt: now },
     ]);
 
-    expect(sentToday([campaign], "account-1", "2026-08-29")).toBe(1);
+    expect(sentToday([campaign], "account-1", "2026-08-29", "UTC")).toBe(1);
   });
 
-  it("returns in-flight recipients to pending after restart", () => {
+  it("counts sent messages on the account's local day", () => {
+    const campaign = baseCampaign([
+      {
+        email: "one@example.com",
+        accountId: "account-1",
+        status: "sent",
+        sentAt: "2026-08-29T23:30:00.000Z",
+      },
+    ]);
+
+    expect(sentToday([campaign], "account-1", "2026-08-30", "Europe/Lisbon")).toBe(1);
+  });
+
+  it("marks in-flight recipients as unknown after restart", () => {
     const campaign = baseCampaign([
       { email: "ada@example.com", accountId: "account-1", status: "sending" },
     ]);
@@ -103,7 +116,10 @@ describe("campaign rules", () => {
     const [recovered] = recoverInterruptedCampaigns([campaign]);
 
     expect(recovered.status).toBe("paused");
-    expect(recovered.recipients[0].status).toBe("pending");
+    expect(recovered.recipients[0]).toMatchObject({
+      status: "failed",
+      error: "Delivery result is unknown. Check Gmail Sent before retrying.",
+    });
     expect(campaign.recipients[0].status).toBe("sending");
   });
 });

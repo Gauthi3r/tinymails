@@ -64,15 +64,14 @@ export function createApp(dependencies: AppDependencies) {
     if (typeof body.source !== "string" || !body.source.trim()) {
       throw new PublicError("A source name is required.");
     }
+    const source = body.source.trim();
     const incoming = body.leads.filter(isContactInput);
     if (incoming.length !== body.leads.length) throw new PublicError("Every lead needs an email address.");
-    const result = mergeLeads(
-      await dependencies.repositories.leads.list(),
-      incoming,
-      body.source.trim(),
-      clock().toISOString(),
-    );
-    await dependencies.repositories.leads.saveAll(result.leads);
+    let result: ReturnType<typeof mergeLeads> | null = null;
+    await dependencies.repositories.leads.update((leads) => {
+      result = mergeLeads(leads, incoming, source, clock().toISOString());
+      return result.leads;
+    });
     response.json(result);
   }));
 
@@ -104,25 +103,31 @@ export function createApp(dependencies: AppDependencies) {
   }));
 
   app.post("/api/campaigns/:id/start", asyncRoute(async (request, response) => {
-    const campaign = await dependencies.repositories.campaigns.get(firstParam(request.params.id));
+    const campaign = await dependencies.repositories.campaigns.update(
+      firstParam(request.params.id),
+      (record) => ({ ...record, status: "running" }),
+    );
     if (!campaign) {
       response.status(404).json({ error: "Campaign not found." });
       return;
     }
-    campaign.status = "running";
-    await dependencies.repositories.campaigns.save(campaign);
-    setImmediate(() => void runner.run(campaign.id));
+    setImmediate(() => {
+      void runner.run(campaign.id).catch((error: unknown) => {
+        console.error("TinyMails campaign runner failed", error);
+      });
+    });
     response.status(202).json({ campaign });
   }));
 
   app.post("/api/campaigns/:id/pause", asyncRoute(async (request, response) => {
-    const campaign = await dependencies.repositories.campaigns.get(firstParam(request.params.id));
+    const campaign = await dependencies.repositories.campaigns.update(
+      firstParam(request.params.id),
+      (record) => ({ ...record, status: "paused" }),
+    );
     if (!campaign) {
       response.status(404).json({ error: "Campaign not found." });
       return;
     }
-    campaign.status = "paused";
-    await dependencies.repositories.campaigns.save(campaign);
     response.json({ campaign });
   }));
 

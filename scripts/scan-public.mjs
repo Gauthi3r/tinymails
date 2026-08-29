@@ -48,10 +48,6 @@ function publicPath(root, path) {
   return relative(root, path).split(sep).join("/");
 }
 
-function isPlanningFixture(path) {
-  return path.startsWith("docs/superpowers/");
-}
-
 function inspectText(contents, path) {
   const findings = [];
 
@@ -97,7 +93,7 @@ export async function scanTree(root) {
       if (entry.name.endsWith(".log") || (extname(entry.name) === ".csv" && !displayPath.includes("/"))) {
         findings.push({ rule: "runtime-file", path: displayPath });
       }
-      if (textExtensions.has(extname(entry.name).toLowerCase()) && !isPlanningFixture(displayPath)) {
+      if (textExtensions.has(extname(entry.name).toLowerCase())) {
         const contents = await readFile(path, "utf8");
         findings.push(...inspectText(contents, displayPath));
       }

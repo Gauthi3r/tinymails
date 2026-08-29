@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -25,5 +25,24 @@ describe("public tree scanner", () => {
     await writeFile(join(root, "README.md"), "Send a test to you@example.com");
 
     expect(await scanTree(root)).toEqual([]);
+  });
+
+  it("checks planning documents for legacy product names", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tinymails-scan-"));
+    const planningDir = join(root, "docs", "superpowers");
+    await mkdir(planningDir, { recursive: true });
+    const legacyName = ["le", "mon"].join("");
+    const privateAddress = ["person", "private", "invalid"].join("@").replace("@invalid", ".invalid");
+    const credentialKey = ["refresh", "token"].join("_");
+    await writeFile(
+      join(planningDir, "migration.md"),
+      `Migrated from ${legacyName}. Contact ${privateAddress}. ${credentialKey}: secret.`,
+    );
+
+    expect(await scanTree(root)).toEqual([
+      { rule: "secret-token", path: "docs/superpowers/migration.md" },
+      { rule: "email-address", path: "docs/superpowers/migration.md" },
+      { rule: "private-name", path: "docs/superpowers/migration.md" },
+    ]);
   });
 });

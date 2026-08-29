@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -20,7 +21,7 @@ export class JsonStore<T> {
 
   async write(value: T): Promise<void> {
     const directory = dirname(this.path);
-    const temporaryPath = join(directory, `${basename(this.path)}.${process.pid}.tmp`);
+    const temporaryPath = join(directory, `${basename(this.path)}.${process.pid}.${randomUUID()}.tmp`);
     await mkdir(directory, { recursive: true });
     await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
       encoding: "utf8",

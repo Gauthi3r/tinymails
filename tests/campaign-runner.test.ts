@@ -101,6 +101,92 @@ describe("campaign runner", () => {
     expect(gmail.sent).toEqual([]);
     expect((await campaigns.get("campaign-1"))?.status).toBe("paused");
   });
+
+  it("does not send a campaign twice when start is requested concurrently", async () => {
+    gmail.queueResult({ ok: true, messageId: "message-1" });
+
+    await Promise.all([runner.run("campaign-1"), runner.run("campaign-1")]);
+
+    expect(gmail.sent).toHaveLength(1);
+    expect((await campaigns.get("campaign-1"))?.recipients[0].status).toBe("sent");
+  });
+
+  it("observes a pause before claiming the next recipient", async () => {
+    let releaseDelay!: () => void;
+    let notifyDelayStarted!: () => void;
+    const delayStarted = new Promise<void>((resolve) => {
+      notifyDelayStarted = resolve;
+    });
+    const delayed = new Promise<void>((resolve) => {
+      releaseDelay = resolve;
+    });
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture({
+        recipients: [
+          { email: "one@example.com", accountId: "account-1", status: "pending" },
+          { email: "two@example.com", accountId: "account-1", status: "pending" },
+        ],
+      }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => {
+        notifyDelayStarted();
+        await delayed;
+      },
+    });
+    const running = runner.run("campaign-1");
+    await delayStarted;
+    await campaigns.update("campaign-1", (campaign) => ({ ...campaign, status: "paused" }));
+    releaseDelay();
+
+    await running;
+
+    expect(gmail.sent).toHaveLength(1);
+    expect((await campaigns.get("campaign-1"))?.recipients[1].status).toBe("pending");
+  });
+
+  it("pauses with an unknown delivery result when Gmail throws", async () => {
+    gmail.queueError(new Error("socket closed"));
+
+    await runner.run("campaign-1");
+
+    const campaign = await campaigns.get("campaign-1");
+    expect(campaign?.status).toBe("paused");
+    expect(campaign?.recipients[0]).toMatchObject({
+      status: "failed",
+      error: "Delivery result is unknown. Check Gmail Sent before retrying.",
+    });
+  });
+
+  it("waits a deterministic value inside the combined delay bounds", async () => {
+    const delays: number[] = [];
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture({ delayMinSeconds: 12, delayMaxSeconds: 18 }),
+    ]);
+    accounts = new MemoryAccountRepository([
+      accountFixture({ delayMinSeconds: 10, delayMaxSeconds: 20 }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      random: () => 0.5,
+      delay: async (milliseconds) => {
+        delays.push(milliseconds);
+      },
+    });
+
+    await runner.run("campaign-1");
+
+    expect(delays).toEqual([15_000]);
+  });
 });
 
 class MemoryCampaignRepository implements CampaignRepository {
@@ -121,6 +207,14 @@ class MemoryCampaignRepository implements CampaignRepository {
 
   async save(campaign: Campaign): Promise<void> {
     this.records.set(campaign.id, structuredClone(campaign));
+  }
+
+  async update(id: string, update: (campaign: Campaign) => Campaign): Promise<Campaign | null> {
+    const campaign = this.records.get(id);
+    if (!campaign) return null;
+    const updated = update(structuredClone(campaign));
+    this.records.set(id, structuredClone(updated));
+    return structuredClone(updated);
   }
 }
 

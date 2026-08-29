@@ -100,7 +100,12 @@ export function renderMessage(template: string, contact: ContactInput): string {
     .replaceAll("{company}", contact.company?.trim() || "your company");
 }
 
-export function sentToday(campaigns: Campaign[], accountId: string, day: string): number {
+export function sentToday(
+  campaigns: Campaign[],
+  accountId: string,
+  day: string,
+  timeZone = "UTC",
+): number {
   return campaigns.reduce(
     (total, campaign) =>
       total +
@@ -108,7 +113,7 @@ export function sentToday(campaigns: Campaign[], accountId: string, day: string)
         (recipient) =>
           recipient.accountId === accountId &&
           recipient.status === "sent" &&
-          recipient.sentAt?.slice(0, 10) === day,
+          recipient.sentAt !== undefined && localDay(new Date(recipient.sentAt), timeZone) === day,
       ).length,
     0,
   );
@@ -116,13 +121,29 @@ export function sentToday(campaigns: Campaign[], accountId: string, day: string)
 
 export function recoverInterruptedCampaigns(campaigns: Campaign[]): Campaign[] {
   return campaigns.map((campaign) => {
-    if (campaign.status !== "running") return structuredClone(campaign);
     return {
       ...campaign,
-      status: "paused",
+      status: campaign.status === "running" ? "paused" : campaign.status,
       recipients: campaign.recipients.map((recipient) =>
-        recipient.status === "sending" ? { ...recipient, status: "pending" } : { ...recipient },
+        recipient.status === "sending"
+          ? {
+              ...recipient,
+              status: "failed",
+              error: "Delivery result is unknown. Check Gmail Sent before retrying.",
+            }
+          : { ...recipient },
       ),
     };
   });
+}
+
+export function localDay(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }

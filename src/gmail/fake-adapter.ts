@@ -9,10 +9,14 @@ import type {
 
 export class FakeGmailAccountAdapter implements GmailAccountAdapter {
   readonly sent: Array<{ accountId: string; message: OutgoingMessage }> = [];
-  private readonly queuedResults: SendResult[] = [];
+  private readonly queuedResults: Array<SendResult | Error> = [];
 
   queueResult(result: SendResult): void {
     this.queuedResults.push(result);
+  }
+
+  queueError(error: Error): void {
+    this.queuedResults.push(error);
   }
 
   async status(account: Account): Promise<AccountStatus> {
@@ -24,6 +28,7 @@ export class FakeGmailAccountAdapter implements GmailAccountAdapter {
       ok: true,
       messageId: `fake-message-${this.sent.length + 1}`,
     };
+    if (result instanceof Error) throw result;
     if (result.ok) this.sent.push({ accountId: account.id, message: structuredClone(message) });
     return result;
   }
