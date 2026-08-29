@@ -12,6 +12,9 @@ describe("TinyMails app shell", () => {
       getCampaigns: async () => [],
       getLeads: async () => ({ leads: [], counts: { total: 0 }, sources: [] }),
       getReplies: async () => [],
+      startGoogleOAuth: async () => ({ sessionId: "session", authorizationUrl: "https://example.com" }),
+      getGoogleOAuthStatus: async () => ({ status: "pending" }),
+      sendTestEmail: async () => ({ ok: true, messageId: "message" }),
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",
@@ -33,6 +36,9 @@ describe("TinyMails app shell", () => {
       getCampaigns: async () => [],
       getLeads: async () => ({ leads: [], counts: { total: 0 }, sources: [] }),
       getReplies: async () => [],
+      startGoogleOAuth: async () => ({ sessionId: "session", authorizationUrl: "https://example.com" }),
+      getGoogleOAuthStatus: async () => ({ status: "pending" }),
+      sendTestEmail: async () => ({ ok: true, messageId: "message" }),
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",
@@ -42,6 +48,7 @@ describe("TinyMails app shell", () => {
     };
     render(<App api={fakeApi} />);
 
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByText("No Gmail account connected")).toBeVisible();
   });
 });

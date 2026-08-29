@@ -78,7 +78,14 @@ export function App({ api }: { api: AppApi }) {
         {page === "campaigns" ? <CampaignsPage api={api} /> : null}
         {page === "leads" ? <LeadsPage api={api} /> : null}
         {page === "replies" ? <RepliesPage api={api} /> : null}
-        {page === "settings" ? <SettingsPage settings={settings} error={settingsError} /> : null}
+        {page === "settings" ? (
+          <SettingsPage
+            api={api}
+            settings={settings}
+            error={settingsError}
+            onSettingsChange={setSettings}
+          />
+        ) : null}
       </main>
     </div>
   );

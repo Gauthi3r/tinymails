@@ -16,11 +16,19 @@ export interface SettingsResponse {
   suppressionCount: number;
 }
 
+export type GoogleOAuthStatus =
+  | { status: "pending" }
+  | { status: "connected"; account: PublicAccount }
+  | { status: "failed" | "expired"; message: string };
+
 export interface AppApi {
   getCampaigns(): Promise<Campaign[]>;
   getLeads(): Promise<LeadsResponse>;
   getReplies(): Promise<Reply[]>;
   getSettings(): Promise<SettingsResponse>;
+  startGoogleOAuth(client: unknown): Promise<{ sessionId: string; authorizationUrl: string }>;
+  getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
+  sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
 }
 
 export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
@@ -37,6 +45,15 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     async getSettings() {
       return getJson<SettingsResponse>(fetcher, "/api/settings");
     },
+    async startGoogleOAuth(client) {
+      return sendJson(fetcher, "/api/oauth/google/start", { client });
+    },
+    async getGoogleOAuthStatus(sessionId) {
+      return getJson<GoogleOAuthStatus>(fetcher, `/api/oauth/google/sessions/${encodeURIComponent(sessionId)}`);
+    },
+    async sendTestEmail(accountId) {
+      return sendJson(fetcher, `/api/accounts/${encodeURIComponent(accountId)}/test-send`, {});
+    },
   };
 }
 
@@ -44,4 +61,24 @@ async function getJson<T>(fetcher: typeof fetch, path: string): Promise<T> {
   const response = await fetcher(path, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("The local TinyMails service did not respond.");
   return response.json() as Promise<T>;
+}
+
+async function sendJson<T>(fetcher: typeof fetch, path: string, body: unknown): Promise<T> {
+  const response = await fetcher(path, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await responseError(response));
+  return response.json() as Promise<T>;
+}
+
+async function responseError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error) return body.error;
+  } catch {
+    // A bounded local fallback is clearer than leaking a parser or transport error.
+  }
+  return "The local TinyMails service could not complete that request.";
 }
