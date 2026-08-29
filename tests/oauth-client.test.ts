@@ -57,7 +57,7 @@ describe("credential vault", () => {
   });
 });
 
-function desktopClient() {
+function desktopClient(): { installed: Record<string, string | string[] | undefined> } {
   return {
     installed: {
       client_id: "123456789.apps.googleusercontent.com",
@@ -70,4 +70,4 @@ function desktopClient() {
   };
 }
 
-const clientSecretKey = ["client", "secret"].join("_") as "client_secret";
+const clientSecretKey = "client_secret";

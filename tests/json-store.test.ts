@@ -1,4 +1,4 @@
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -22,6 +22,16 @@ describe("local data storage", () => {
 
     expect(await store.read()).toEqual(stored);
     expect((await readdir(dir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("creates the application data directory with user-only permissions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tinymails-store-"));
+    const dataDir = join(root, "private-data");
+    const store = new JsonStore(join(dataDir, "campaigns.json"), [] as Campaign[]);
+
+    await store.write([]);
+
+    expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
   });
 
   it("returns a fresh default value when its file does not exist", async () => {

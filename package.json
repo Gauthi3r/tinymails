@@ -12,11 +12,12 @@
     "start": "node scripts/launch.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -p tsconfig.test.json",
     "serve": "tsx src/server/index.ts",
     "lint": "oxlint .",
     "test": "vitest",
     "scan": "node scripts/scan-public.mjs",
-    "check": "npm run scan && npm run lint && npm test -- --run && npm run build"
+    "check": "npm run scan && npm run lint && npm run typecheck && npm test -- --run && npm run build"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

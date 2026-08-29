@@ -130,7 +130,7 @@ describe("local API", () => {
   });
 
   it("does not return local credential directories to the browser", async () => {
-    const hiddenField = ["client", "secret"].join("_");
+    const hiddenField = "client_secret";
     await repositories.accounts.save({
       ...accountFixture(),
       [hiddenField]: "must-not-leave-the-server",
@@ -141,6 +141,42 @@ describe("local API", () => {
     expect(response.body.accounts[0]).not.toHaveProperty("credentialDirectory");
     expect(response.body.accounts[0]).not.toHaveProperty(hiddenField);
     expect(JSON.stringify(response.body)).not.toContain("/tmp/credentials");
+  });
+
+  it("updates account sending limits and an overnight window", async () => {
+    const response = await request(app)
+      .post("/api/accounts/account-1/settings")
+      .send({
+        dailyCap: 40,
+        delayMinSeconds: 20,
+        delayMaxSeconds: 60,
+        timeZone: "Europe/Lisbon",
+        sendingWindow: { days: [1, 3, 5], start: "22:00", end: "02:00" },
+      })
+      .expect(200);
+
+    expect(response.body.account).toMatchObject({
+      id: "account-1",
+      dailyCap: 40,
+      delayMinSeconds: 20,
+      delayMaxSeconds: 60,
+      timeZone: "Europe/Lisbon",
+      sendingWindow: { days: [1, 3, 5], start: "22:00", end: "02:00" },
+    });
+    expect(response.body.account).not.toHaveProperty("credentialDirectory");
+  });
+
+  it("rejects invalid account sending settings", async () => {
+    await request(app)
+      .post("/api/accounts/account-1/settings")
+      .send({
+        dailyCap: 501,
+        delayMinSeconds: 60,
+        delayMaxSeconds: 20,
+        timeZone: "Not/A_Time_Zone",
+        sendingWindow: { days: [], start: "9am", end: "17:00" },
+      })
+      .expect(400, { error: "Gmail account daily cap must be a whole number from 1 to 500." });
   });
 
   it("rejects unknown Gmail accounts and reversed delay bounds", async () => {
@@ -162,6 +198,22 @@ describe("local API", () => {
       .post("/api/campaigns")
       .send({ ...base, delayMinSeconds: 30, delayMaxSeconds: 45, accountIds: ["missing-account"] })
       .expect(400, { error: "Choose only connected Gmail accounts." });
+  });
+
+  it("rejects campaign caps above the local safety ceiling", async () => {
+    await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Product update",
+        subject: "A short update",
+        body: "Hi there",
+        accountIds: ["account-1"],
+        dailyCap: 2_500,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com" }],
+      })
+      .expect(400, { error: "Campaign daily cap cannot exceed 500." });
   });
 
   it("requires a confirmed test send before campaign delivery starts", async () => {
@@ -233,8 +285,30 @@ describe("local API", () => {
     expect(response.body).toEqual({ error: "Leads must be an array." });
   });
 
+  it("accepts a reviewed import payload larger than the old 2 MB server limit", async () => {
+    await request(app)
+      .post("/api/leads/import")
+      .send({
+        source: "Large reviewed import",
+        leads: [{ email: "person@example.com" }],
+        padding: "x".repeat(3_000_000),
+      })
+      .expect(200);
+  });
+
+  it("returns a clear error when a JSON request exceeds the import allowance", async () => {
+    await request(app)
+      .post("/api/leads/import")
+      .send({
+        source: "Too large",
+        leads: [{ email: "person@example.com" }],
+        padding: "x".repeat(13_000_000),
+      })
+      .expect(413, { error: "That request is larger than TinyMails' 12 MB local limit." });
+  });
+
   it("exports a portable backup without credential paths", async () => {
-    const hiddenField = ["client", "secret"].join("_");
+    const hiddenField = "client_secret";
     await repositories.accounts.save({
       ...accountFixture(),
       [hiddenField]: "must-not-leave-the-server",

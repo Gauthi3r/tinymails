@@ -62,4 +62,4 @@ function optionalStringField(record: Record<string, unknown>, key: string): stri
   return stringField(record, key) ?? undefined;
 }
 
-const clientSecretKey = ["client", "secret"].join("_");
+const clientSecretKey = "client_secret";

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { AppApi, PublicAccount, SettingsResponse } from "./api";
@@ -59,6 +59,32 @@ describe("Gmail setup", () => {
     expect(await screen.findByText("That OAuth client file is unexpectedly large.")).toBeVisible();
     expect(api.startGoogleOAuth).not.toHaveBeenCalled();
   });
+
+  it("edits the Gmail account sending window and limits", async () => {
+    const account = accountFixture();
+    const api = connectionApi(account);
+    const onSettingsChange = vi.fn();
+    render(
+      <SettingsPage
+        api={api}
+        settings={settingsFixture([account])}
+        error={false}
+        onSettingsChange={onSettingsChange}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit sending rules" }));
+    fireEvent.change(screen.getByLabelText("Account daily cap"), { target: { value: "40" } });
+    fireEvent.change(screen.getByLabelText("Sending starts"), { target: { value: "22:00" } });
+    fireEvent.change(screen.getByLabelText("Sending ends"), { target: { value: "02:00" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save sending rules" }));
+
+    expect(api.updateAccount).toHaveBeenCalledWith("account-1", expect.objectContaining({
+      dailyCap: 40,
+      sendingWindow: expect.objectContaining({ start: "22:00", end: "02:00" }),
+    }));
+    await waitFor(() => expect(onSettingsChange).toHaveBeenCalled());
+  });
 });
 
 function connectionApi(account: PublicAccount) {
@@ -73,6 +99,7 @@ function connectionApi(account: PublicAccount) {
     })),
     getGoogleOAuthStatus: vi.fn(async () => ({ status: "connected" as const, account })),
     sendTestEmail: vi.fn(async () => ({ ok: true as const, messageId: "message-1" })),
+    updateAccount: vi.fn(async (_accountId, input) => ({ ...account, ...input })),
     importLeads: vi.fn(),
     createCampaign: vi.fn(),
     testCampaign: vi.fn(),

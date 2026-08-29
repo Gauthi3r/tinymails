@@ -70,5 +70,8 @@ function fakeApi() {
       invalid: 0,
     })),
     suppressEmails: vi.fn(async () => ["ada@example.com"]),
-  } as unknown as AppApi & { importLeads: ReturnType<typeof vi.fn> };
+  } as unknown as AppApi & {
+    getLeads: ReturnType<typeof vi.fn>;
+    importLeads: ReturnType<typeof vi.fn>;
+  };
 }

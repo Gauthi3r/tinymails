@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Account } from "../src/domain/types";
-import { MemoryCredentialVault } from "../src/gmail/credential-vault";
+import { MemoryCredentialVault, type StoredGoogleTokens } from "../src/gmail/credential-vault";
 import {
   GoogleGmailAdapter,
   type GoogleRequest,
@@ -86,6 +86,14 @@ describe("Google Gmail adapter", () => {
     ).rejects.toThrow("socket ended after upload");
   });
 
+  it("treats a successful response without a message id as an ambiguous delivery", async () => {
+    transport.responseId = undefined;
+
+    await expect(
+      adapter.send(account(), { to: "person@example.com", subject: "Hello", body: "Body" }),
+    ).rejects.toThrow("Gmail did not confirm the delivery identifier.");
+  });
+
   it("reports a missing credential record as disconnected", async () => {
     await vault.delete("account-1");
 
@@ -113,7 +121,8 @@ describe("Google Gmail adapter", () => {
 class FakeGoogleTransport implements GoogleTransport {
   requests: GoogleRequest[] = [];
   error: Error | null = null;
-  nextTokens = { refreshToken: "refresh-value", accessToken: "access-value" };
+  nextTokens: StoredGoogleTokens = { refreshToken: "refresh-value", accessToken: "access-value" };
+  responseId: string | undefined = "gmail-message-1";
 
   async ensureAccess(): Promise<void> {
     if (this.error) throw this.error;
@@ -122,7 +131,7 @@ class FakeGoogleTransport implements GoogleTransport {
   async request<T>(request: GoogleRequest): Promise<T> {
     this.requests.push(structuredClone(request));
     if (this.error) throw this.error;
-    return { id: "gmail-message-1" } as T;
+    return { id: this.responseId } as T;
   }
 
   credentials() {

@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryCredentialVault } from "../src/gmail/credential-vault";
 import {
+  GoogleAuthLibraryProvider,
   GoogleOAuthFlowError,
   GoogleOAuthService,
+  GOOGLE_SEND_SCOPES,
   type AuthorizationInput,
   type CodeExchangeInput,
   type GoogleIdentity,
@@ -166,6 +168,27 @@ describe("Google OAuth sessions", () => {
   });
 });
 
+describe("Google authorization request", () => {
+  it("does not fold scopes from earlier grants into the TinyMails token", async () => {
+    const provider = new GoogleAuthLibraryProvider();
+    const authorization = await provider.createAuthorization({
+      client: {
+        clientId: "123456789.apps.googleusercontent.com",
+        clientSecret: "test-client-secret",
+        projectId: "tinymails-example",
+        authUri: "https://accounts.google.com/o/oauth2/auth",
+        tokenUri: "https://oauth2.googleapis.com/token",
+      },
+      redirectUri: "http://127.0.0.1:3210/api/oauth/google/callback",
+      state: "state-value",
+      scopes: [...GOOGLE_SEND_SCOPES],
+    });
+
+    const url = new URL(authorization.authorizationUrl);
+    expect(url.searchParams.has("include_granted_scopes")).toBe(false);
+  });
+});
+
 class FakeGoogleOAuthProvider implements GoogleOAuthProvider {
   readonly authorizations: AuthorizationInput[] = [];
   identity: GoogleIdentity = {
@@ -201,4 +224,4 @@ function desktopClient() {
   };
 }
 
-const clientSecretKey = ["client", "secret"].join("_") as "client_secret";
+const clientSecretKey = "client_secret";

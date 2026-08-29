@@ -8,9 +8,9 @@ describe("public tree scanner", () => {
   it("flags credentials, runtime files, and non-example email addresses", async () => {
     const root = await mkdtemp(join(tmpdir(), "tinymails-scan-"));
     const credentialFile = ["token", "cache.json"].join("_");
-    const credentialKey = ["refresh", "token"].join("_");
+    const leakedToken = ["ya", "29.", "A".repeat(30)].join("");
     const privateAddress = ["person", "private", "invalid"].join("@").replace("@invalid", ".invalid");
-    await writeFile(join(root, credentialFile), JSON.stringify({ [credentialKey]: "secret" }));
+    await writeFile(join(root, credentialFile), JSON.stringify({ value: leakedToken }));
     await writeFile(join(root, "notes.txt"), `contact ${privateAddress}`);
 
     const findings = await scanTree(root);
@@ -33,14 +33,12 @@ describe("public tree scanner", () => {
     await mkdir(planningDir, { recursive: true });
     const privateTerm = "former-product";
     const privateAddress = ["person", "private", "invalid"].join("@").replace("@invalid", ".invalid");
-    const credentialKey = ["refresh", "token"].join("_");
     await writeFile(
       join(planningDir, "migration.md"),
-      `Migrated from ${privateTerm}. Contact ${privateAddress}. ${credentialKey}: secret.`,
+      `Migrated from ${privateTerm}. Contact ${privateAddress}.`,
     );
 
     expect(await scanTree(root, { privateTerms: [privateTerm] })).toEqual([
-      { rule: "secret-token", path: "docs/superpowers/migration.md" },
       { rule: "email-address", path: "docs/superpowers/migration.md" },
       { rule: "private-name", path: "docs/superpowers/migration.md" },
     ]);

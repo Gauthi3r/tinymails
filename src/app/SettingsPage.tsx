@@ -22,6 +22,7 @@ export function SettingsPage({
   const [connecting, setConnecting] = useState(false);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [editingAccount, setEditingAccount] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
   const displayAccounts = useMemo(() => {
     const accounts = [...(settings?.accounts ?? [])];
@@ -96,6 +97,18 @@ export function SettingsPage({
     }
   }
 
+  function accountRulesSaved(account: PublicAccount) {
+    setEditingAccount(null);
+    setConnectionAccount((current) => current?.id === account.id ? account : current);
+    if (settings) {
+      onSettingsChange({
+        ...settings,
+        accounts: settings.accounts.map((record) => record.id === account.id ? account : record),
+      });
+    }
+    setConnectionMessage(`Sending rules saved for ${account.email}.`);
+  }
+
   return (
     <PageFrame
       eyebrow="Local configuration"
@@ -157,27 +170,49 @@ export function SettingsPage({
         <SquircleCard title="Gmail accounts" icon={<Mail />} contentClassName="min-h-40 py-2">
           {settings === null ? <div className="h-32 animate-pulse" aria-label="Loading accounts" /> : null}
           {displayAccounts.map((account) => (
-            <SquircleCardRow
-              key={account.id}
-              label={
-                <span className="flex flex-col">
-                  <span>{account.label}</span>
-                  <span className="text-xs text-muted-foreground">{account.email}</span>
-                </span>
-              }
-              value={
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  loading={testingAccount === account.id}
-                  onClick={() => void sendTest(account)}
-                  aria-label="Send test email"
-                >
-                  <Send className="size-3.5" aria-hidden="true" /> Test
-                </Button>
-              }
-              className="min-h-14"
-            />
+            <div key={account.id} className="border-b border-border last:border-b-0">
+              <SquircleCardRow
+                label={
+                  <span className="flex flex-col">
+                    <span>{account.label}</span>
+                    <span className="text-xs text-muted-foreground">{account.email}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {account.sendingWindow.start}–{account.sendingWindow.end} · {account.timeZone}
+                    </span>
+                  </span>
+                }
+                value={
+                  <span className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setEditingAccount(editingAccount === account.id ? null : account.id)}
+                      aria-label="Edit sending rules"
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      loading={testingAccount === account.id}
+                      onClick={() => void sendTest(account)}
+                      aria-label="Send test email"
+                    >
+                      <Send className="size-3.5" aria-hidden="true" /> Test
+                    </Button>
+                  </span>
+                }
+                className="min-h-16"
+              />
+              {editingAccount === account.id ? (
+                <AccountRulesForm
+                  account={account}
+                  api={api}
+                  onCancel={() => setEditingAccount(null)}
+                  onSaved={accountRulesSaved}
+                />
+              ) : null}
+            </div>
           ))}
           {displayAccounts.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-muted-foreground">No accounts yet.</p>
@@ -216,6 +251,120 @@ export function SettingsPage({
         />
       </SquircleCard>
     </PageFrame>
+  );
+}
+
+const weekdays = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+] as const;
+
+function AccountRulesForm({
+  account,
+  api,
+  onCancel,
+  onSaved,
+}: {
+  account: PublicAccount;
+  api: AppApi;
+  onCancel: () => void;
+  onSaved: (account: PublicAccount) => void;
+}) {
+  const [dailyCap, setDailyCap] = useState(account.dailyCap);
+  const [delayMinSeconds, setDelayMinSeconds] = useState(account.delayMinSeconds);
+  const [delayMaxSeconds, setDelayMaxSeconds] = useState(account.delayMaxSeconds);
+  const [timeZone, setTimeZone] = useState(account.timeZone);
+  const [days, setDays] = useState(new Set(account.sendingWindow.days));
+  const [start, setStart] = useState(account.sendingWindow.start);
+  const [end, setEnd] = useState(account.sendingWindow.end);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateAccount(account.id, {
+        dailyCap,
+        delayMinSeconds,
+        delayMaxSeconds,
+        timeZone: timeZone.trim(),
+        sendingWindow: { days: [...days], start, end },
+      });
+      onSaved(updated);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "The sending rules could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-border bg-card px-4 py-4">
+      {error ? <p role="status" className="mb-3 text-xs text-destructive">{error}</p> : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <RuleNumber label="Account daily cap" value={dailyCap} min={1} max={500} onChange={setDailyCap} />
+        <label className="text-xs font-medium text-muted-foreground">
+          Time zone
+          <input aria-label="Account time zone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+        </label>
+        <RuleNumber label="Minimum delay" value={delayMinSeconds} min={0} max={3600} onChange={setDelayMinSeconds} />
+        <RuleNumber label="Maximum delay" value={delayMaxSeconds} min={0} max={3600} onChange={setDelayMaxSeconds} />
+        <label className="text-xs font-medium text-muted-foreground">
+          Sending starts
+          <input aria-label="Sending starts" type="time" value={start} onChange={(event) => setStart(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+        </label>
+        <label className="text-xs font-medium text-muted-foreground">
+          Sending ends
+          <input aria-label="Sending ends" type="time" value={end} onChange={(event) => setEnd(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+        </label>
+      </div>
+      <fieldset className="mt-3">
+        <legend className="text-xs font-medium text-muted-foreground">Sending days</legend>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {weekdays.map((day) => (
+            <label key={day.value} className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={days.has(day.value)}
+                onChange={() => setDays((current) => {
+                  const next = new Set(current);
+                  if (next.has(day.value)) next.delete(day.value);
+                  else next.add(day.value);
+                  return next;
+                })}
+                className="size-3.5 accent-primary"
+              />
+              {day.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" loading={saving} onClick={() => void save()} aria-label="Save sending rules">Save rules</Button>
+      </div>
+    </div>
+  );
+}
+
+function RuleNumber({ label, value, min, max, onChange }: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="text-xs font-medium text-muted-foreground">
+      {label}
+      <input aria-label={label} type="number" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+    </label>
   );
 }
 

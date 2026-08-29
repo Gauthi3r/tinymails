@@ -164,7 +164,51 @@ describe("campaign runner", () => {
     await runner.run("campaign-1");
 
     expect(gmail.sent).toEqual([]);
-    expect((await campaigns.get("campaign-1"))?.status).toBe("paused");
+    expect(await campaigns.get("campaign-1")).toMatchObject({
+      status: "paused",
+      pauseReason: "The Gmail account's daily cap has been reached.",
+    });
+  });
+
+  it("records why delivery is paused outside the account sending window", async () => {
+    accounts = new MemoryAccountRepository([
+      accountFixture({ sendingWindow: { days: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" } }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => undefined,
+    });
+
+    await runner.run("campaign-1");
+
+    expect(gmail.sent).toEqual([]);
+    expect(await campaigns.get("campaign-1")).toMatchObject({
+      status: "paused",
+      pauseReason: "Outside the Gmail account's sending window.",
+    });
+  });
+
+  it("sends after midnight inside a window that started the previous day", async () => {
+    const afterMidnight = new Date("2026-09-01T01:00:00.000Z");
+    accounts = new MemoryAccountRepository([
+      accountFixture({ sendingWindow: { days: [1], start: "22:00", end: "02:00" } }),
+    ]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => afterMidnight,
+      delay: async () => undefined,
+    });
+
+    await runner.run("campaign-1");
+
+    expect(gmail.sent).toHaveLength(1);
   });
 
   it("does not send a campaign twice when start is requested concurrently", async () => {

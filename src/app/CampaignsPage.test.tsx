@@ -81,6 +81,14 @@ describe("campaign composer", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Pause Beta note" }));
     expect(api.pauseCampaign).toHaveBeenCalledWith("campaign-1");
   });
+
+  it("shows the reason an automatic pause cannot make progress", async () => {
+    const campaign = campaignFixture();
+    campaign.pauseReason = "Outside the Gmail account's sending window.";
+    render(<CampaignsPage api={fakeApi([campaign])} />);
+
+    expect(await screen.findByText("Outside the Gmail account's sending window.")).toBeVisible();
+  });
 });
 
 function campaignFixture(): Campaign {
@@ -136,6 +144,7 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
     startGoogleOAuth: vi.fn(),
     getGoogleOAuthStatus: vi.fn(),
     sendTestEmail: vi.fn(),
+    updateAccount: vi.fn(),
     importLeads: vi.fn(),
     createCampaign: vi.fn(async () => ({ campaign, excluded: [] })),
     testCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z" })),

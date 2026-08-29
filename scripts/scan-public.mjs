@@ -10,10 +10,11 @@ const credentialNames = new Set([
   "credentials.enc",
   ".encryption_key",
 ]);
-const secretKeys = [
-  ["access", "token"].join("_"),
-  ["refresh", "token"].join("_"),
-  ["client", "secret"].join("_"),
+const secretValuePatterns = [
+  new RegExp(`${["ya", "29"].join("")}\\.[A-Za-z0-9_-]{20,}`),
+  new RegExp(`${["GOC", "SPX"].join("")}-[A-Za-z0-9_-]{20,}`),
+  new RegExp(`${["1", "//"].join("")}[A-Za-z0-9_-]{20,}`),
+  new RegExp(["-----BEGIN", "PRIVATE KEY-----"].join(" ")),
 ];
 const reservedEmailDomains = new Set(["example.com", "example.org", "example.net"]);
 const textExtensions = new Set([
@@ -40,7 +41,7 @@ function publicPath(root, path) {
 function inspectText(contents, path, privateTerms) {
   const findings = [];
 
-  if (secretKeys.some((key) => new RegExp(`(?:["']?${key}["']?\\s*[:=])`, "i").test(contents))) {
+  if (secretValuePatterns.some((pattern) => pattern.test(contents))) {
     findings.push({ rule: "secret-token", path });
   }
 
@@ -59,7 +60,7 @@ function inspectText(contents, path, privateTerms) {
   return findings;
 }
 
-export async function scanTree(root, { privateTerms = [] } = {}) {
+export async function scanTree(root, { privateTerms = /** @type {string[]} */ ([]) } = {}) {
   const findings = [];
 
   async function walk(directory) {

@@ -77,7 +77,7 @@ export class GoogleGmailAdapter implements GmailAccountAdapter {
         data: { raw },
       });
       await this.options.vault.set(account.id, transport.credentials());
-      if (!response.id) return { ok: false, kind: "temporary", message: temporaryMessage };
+      if (!response.id) throw new Error("Gmail did not confirm the delivery identifier.");
       return { ok: true, messageId: response.id };
     } catch (error) {
       const status = responseStatus(error);
@@ -187,10 +187,10 @@ function disconnected(email: string): AccountStatus {
   return { connected: false, email, message: reconnectMessage };
 }
 
-const refreshTokenKey = ["refresh", "token"].join("_") as "refresh_token";
-const accessTokenKey = ["access", "token"].join("_") as "access_token";
-const expiryDateKey = ["expiry", "date"].join("_") as "expiry_date";
-const tokenTypeKey = ["token", "type"].join("_") as "token_type";
-const idTokenKey = ["id", "token"].join("_") as "id_token";
+const refreshTokenKey = "refresh_token";
+const accessTokenKey = "access_token";
+const expiryDateKey = "expiry_date";
+const tokenTypeKey = "token_type";
+const idTokenKey = "id_token";
 const reconnectMessage = "Reconnect this Gmail account in Settings.";
 const temporaryMessage = "Gmail is temporarily unavailable. Try again shortly.";

@@ -212,7 +212,6 @@ export class GoogleAuthLibraryProvider implements GoogleOAuthProvider {
         prompt: "consent",
         scope: input.scopes,
         state: input.state,
-        include_granted_scopes: true,
         code_challenge: verifier.codeChallenge,
         code_challenge_method: CodeChallengeMethod.S256,
       }),

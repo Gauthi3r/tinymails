@@ -120,6 +120,11 @@ export function CampaignsPage({ api }: { api: AppApi }) {
                       <span className="mt-0.5 block text-xs capitalize text-muted-foreground">
                         {campaign.status} · {sent}/{campaign.recipients.length} sent{failed ? ` · ${failed} failed` : ""}
                       </span>
+                      {campaign.status === "paused" && campaign.pauseReason ? (
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">
+                          {campaign.pauseReason}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                   <div className="flex items-center justify-between gap-3 sm:justify-end">

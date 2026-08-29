@@ -31,6 +31,10 @@ export interface AppApi {
   startGoogleOAuth(client: unknown): Promise<{ sessionId: string; authorizationUrl: string }>;
   getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
   sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
+  updateAccount(
+    accountId: string,
+    input: Pick<Account, "dailyCap" | "delayMinSeconds" | "delayMaxSeconds" | "timeZone" | "sendingWindow">,
+  ): Promise<PublicAccount>;
   importLeads(source: string, leads: Array<Pick<Lead, "email" | "firstName" | "company">>): Promise<MergeLeadsResult>;
   createCampaign(input: Omit<CreateCampaignInput, "now">): Promise<CreateCampaignResult>;
   testCampaign(campaignId: string): Promise<Campaign>;
@@ -63,6 +67,13 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async sendTestEmail(accountId) {
       return sendJson(fetcher, `/api/accounts/${encodeURIComponent(accountId)}/test-send`, {});
+    },
+    async updateAccount(accountId, input) {
+      return (await sendJson<{ account: PublicAccount }>(
+        fetcher,
+        `/api/accounts/${encodeURIComponent(accountId)}/settings`,
+        input,
+      )).account;
     },
     async importLeads(source, leads) {
       return sendJson(fetcher, "/api/leads/import", { source, leads });

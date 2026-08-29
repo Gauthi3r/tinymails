@@ -42,7 +42,7 @@ export function createApp(dependencies: AppDependencies) {
 
   app.disable("x-powered-by");
   app.use(localRequestGuard);
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "12mb" }));
 
   app.get("/api/health", (_request, response) => {
     response.json({ ok: true, product: "TinyMails", version: "0.1.0" });
@@ -111,6 +111,20 @@ export function createApp(dependencies: AppDependencies) {
     }
     const status = result.kind === "temporary" ? 503 : result.kind === "auth" ? 409 : 400;
     response.status(status).json({ error: result.message });
+  }));
+
+  app.post("/api/accounts/:id/settings", asyncRoute(async (request, response) => {
+    const accountId = firstParam(request.params.id);
+    if (!(await dependencies.repositories.accounts.get(accountId))) {
+      response.status(404).json({ error: "Gmail account not found." });
+      return;
+    }
+    const settings = accountSettings(objectBody(request.body));
+    const account = await dependencies.repositories.accounts.update(accountId, (record) => ({
+      ...record,
+      ...settings,
+    }));
+    response.json({ account: publicAccount(account as Account) });
   }));
 
   app.get("/api/leads", asyncRoute(async (_request, response) => {
@@ -211,7 +225,7 @@ export function createApp(dependencies: AppDependencies) {
     }
     const campaign = await dependencies.repositories.campaigns.update(
       campaignId,
-      (record) => ({ ...record, status: "running" }),
+      (record) => ({ ...record, status: "running", pauseReason: undefined }),
     );
     if (!campaign) {
       response.status(404).json({ error: "Campaign not found." });
@@ -284,7 +298,7 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/api/campaigns/:id/pause", asyncRoute(async (request, response) => {
     const campaign = await dependencies.repositories.campaigns.update(
       firstParam(request.params.id),
-      (record) => ({ ...record, status: "paused" }),
+      (record) => ({ ...record, status: "paused", pauseReason: "Paused manually." }),
     );
     if (!campaign) {
       response.status(404).json({ error: "Campaign not found." });
@@ -367,6 +381,10 @@ export function createApp(dependencies: AppDependencies) {
   }));
 
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+    if (isPayloadTooLarge(error)) {
+      response.status(413).json({ error: "That request is larger than TinyMails' 12 MB local limit." });
+      return;
+    }
     if (error instanceof PublicError) {
       response.status(400).json({ error: error.message });
       return;
@@ -391,6 +409,10 @@ function localRequestGuard(request: Request, response: Response, next: NextFunct
     return;
   }
   next();
+}
+
+function isPayloadTooLarge(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && (error as { type?: unknown }).type === "entity.too.large");
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -460,7 +482,7 @@ function campaignInput(body: Record<string, unknown>, now: string) {
     subject: body.subject as string,
     body: body.body as string,
     accountIds: body.accountIds,
-    dailyCap: positiveNumber(body.dailyCap, "daily cap"),
+    dailyCap: campaignDailyCap(body.dailyCap),
     delayMinSeconds,
     delayMaxSeconds,
     recipients: body.recipients,
@@ -473,6 +495,73 @@ function positiveNumber(value: unknown, label: string): number {
     throw new PublicError(`Campaign ${label} must be greater than zero.`);
   }
   return value;
+}
+
+function campaignDailyCap(value: unknown): number {
+  const cap = positiveNumber(value, "daily cap");
+  if (!Number.isInteger(cap)) throw new PublicError("Campaign daily cap must be a whole number.");
+  if (cap > 500) throw new PublicError("Campaign daily cap cannot exceed 500.");
+  return cap;
+}
+
+function accountSettings(body: Record<string, unknown>): Pick<
+  Account,
+  "dailyCap" | "delayMinSeconds" | "delayMaxSeconds" | "timeZone" | "sendingWindow"
+> {
+  const dailyCap = body.dailyCap;
+  if (!Number.isInteger(dailyCap) || (dailyCap as number) < 1 || (dailyCap as number) > 500) {
+    throw new PublicError("Gmail account daily cap must be a whole number from 1 to 500.");
+  }
+  const delayMinSeconds = boundedWholeNumber(body.delayMinSeconds, "minimum delay", 0, 3_600);
+  const delayMaxSeconds = boundedWholeNumber(body.delayMaxSeconds, "maximum delay", 0, 3_600);
+  if (delayMaxSeconds < delayMinSeconds) {
+    throw new PublicError("Gmail account maximum delay cannot be below its minimum delay.");
+  }
+  if (typeof body.timeZone !== "string" || !isTimeZone(body.timeZone)) {
+    throw new PublicError("Choose a valid IANA time zone for this Gmail account.");
+  }
+  const window = objectBody(body.sendingWindow);
+  if (
+    !Array.isArray(window.days) ||
+    window.days.length === 0 ||
+    !window.days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+  ) {
+    throw new PublicError("Choose at least one valid sending day.");
+  }
+  if (!isClockTime(window.start) || !isClockTime(window.end)) {
+    throw new PublicError("Sending window times must use 24-hour HH:MM format.");
+  }
+  return {
+    dailyCap: dailyCap as number,
+    delayMinSeconds,
+    delayMaxSeconds,
+    timeZone: body.timeZone,
+    sendingWindow: {
+      days: [...new Set(window.days as number[])].sort((left, right) => left - right),
+      start: window.start as string,
+      end: window.end as string,
+    },
+  };
+}
+
+function boundedWholeNumber(value: unknown, label: string, minimum: number, maximum: number): number {
+  if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    throw new PublicError(`Gmail account ${label} must be a whole number from ${minimum} to ${maximum}.`);
+  }
+  return value as number;
+}
+
+function isTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isClockTime(value: unknown): value is string {
+  return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function requiredString(value: unknown, message: string): string {
