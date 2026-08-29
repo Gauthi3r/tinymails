@@ -64,7 +64,12 @@ export class GoogleGmailAdapter implements GmailAccountAdapter {
       throw error;
     }
 
-    const transport = await this.transport(account);
+    let transport: GoogleTransport;
+    try {
+      transport = await this.transport(account);
+    } catch {
+      return { ok: false, kind: "auth", message: reconnectMessage };
+    }
     try {
       const response = await transport.request<{ id?: string }>({
         method: "POST",

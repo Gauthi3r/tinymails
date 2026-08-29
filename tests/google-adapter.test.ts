@@ -95,6 +95,19 @@ describe("Google Gmail adapter", () => {
       message: "Reconnect this Gmail account in Settings.",
     });
   });
+
+  it("maps missing credentials to auth before attempting delivery", async () => {
+    await vault.delete("account-1");
+
+    await expect(
+      adapter.send(account(), { to: "person@example.com", subject: "Hello", body: "Body" }),
+    ).resolves.toEqual({
+      ok: false,
+      kind: "auth",
+      message: "Reconnect this Gmail account in Settings.",
+    });
+    expect(transport.requests).toHaveLength(0);
+  });
 });
 
 class FakeGoogleTransport implements GoogleTransport {
