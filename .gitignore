@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env*
+!.env.example
+data/
+.tinymails/
+client_secret.json
+token_cache.json
+credentials.json
+credentials.enc
+.encryption_key
+/*.csv
+!examples/*.csv

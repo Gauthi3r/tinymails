@@ -1,0 +1,49 @@
+{
+  "name": "tinymails",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first Gmail mail merge for thoughtful, permission-based outreach.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "serve": "tsx src/server/index.ts",
+    "lint": "oxlint .",
+    "test": "vitest",
+    "scan": "node scripts/scan-public.mjs",
+    "check": "npm run scan && npm run lint && npm test -- --run && npm run build"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@tailwindcss/vite": "^4.1.14",
+    "express": "^5.1.0",
+    "lucide-react": "^0.544.0",
+    "motion": "^12.23.24",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwindcss": "^4.1.14"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@types/supertest": "^6.0.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "jsdom": "^27.0.0",
+    "oxlint": "^1.17.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}
