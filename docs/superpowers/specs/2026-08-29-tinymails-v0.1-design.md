@@ -64,6 +64,8 @@ TinyMails remains a single-user local web application.
 - Persistence: small JSON and text files written atomically in the TinyMails application-data directory.
 - Browser communication: local JSON API. Running campaign status may continue with short polling in v0.1.
 
+The browser is not trusted merely because the server runs on loopback. Every request must use a literal `127.0.0.1` or `localhost` Host header. State-changing requests with an Origin header must match that loopback origin. These checks prevent a remote website from reaching the API through DNS rebinding. OAuth state remains a separate, single-use defense for the callback.
+
 No private user data belongs inside the source repository. Runtime data defaults to an operating-system user-data location and can be overridden with `TINYMAILS_DATA_DIR` for development and tests.
 
 The Gmail adapter is isolated behind a small interface:

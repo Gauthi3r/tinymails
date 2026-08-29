@@ -28,6 +28,42 @@ describe("local API", () => {
     });
   });
 
+  it("rejects non-loopback Host headers before exposing local data", async () => {
+    const settings = await request(app)
+      .get("/api/settings")
+      .set("Host", "attacker.example.com")
+      .expect(403);
+    const backup = await request(app)
+      .get("/api/backup")
+      .set("Host", "attacker.example.com:3210")
+      .expect(403);
+
+    expect(settings.body).toEqual({ error: "TinyMails only accepts requests from its local address." });
+    expect(backup.body).toEqual({ error: "TinyMails only accepts requests from its local address." });
+  });
+
+  it("rejects cross-origin state changes even with a loopback Host", async () => {
+    await request(app)
+      .post("/api/campaigns")
+      .set("Host", "127.0.0.1:3210")
+      .set("Origin", "https://attacker.example.com")
+      .send({})
+      .expect(403, { error: "TinyMails rejected a request from another website." });
+
+    expect(await repositories.campaigns.list()).toEqual([]);
+  });
+
+  it("accepts same-origin state changes from either loopback hostname", async () => {
+    await request(app)
+      .post("/api/suppression")
+      .set("Host", "localhost:3210")
+      .set("Origin", "http://localhost:3210")
+      .send({ emails: ["blocked@example.com"] })
+      .expect(200);
+
+    expect(await repositories.suppression.list()).toEqual(["blocked@example.com"]);
+  });
+
   it("imports leads and returns derived status", async () => {
     await request(app)
       .post("/api/leads/import")

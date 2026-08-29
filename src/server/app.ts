@@ -41,6 +41,7 @@ export function createApp(dependencies: AppDependencies) {
   });
 
   app.disable("x-powered-by");
+  app.use(localRequestGuard);
   app.use(express.json({ limit: "2mb" }));
 
   app.get("/api/health", (_request, response) => {
@@ -375,6 +376,42 @@ export function createApp(dependencies: AppDependencies) {
   });
 
   return app;
+}
+
+function localRequestGuard(request: Request, response: Response, next: NextFunction): void {
+  const host = request.get("host")?.toLowerCase();
+  if (!host || !isLoopbackHost(host)) {
+    response.status(403).json({ error: "TinyMails only accepts requests from its local address." });
+    return;
+  }
+
+  const origin = request.get("origin");
+  if (origin && isStateChangingMethod(request.method) && !isSameLoopbackOrigin(origin, host)) {
+    response.status(403).json({ error: "TinyMails rejected a request from another website." });
+    return;
+  }
+  next();
+}
+
+function isLoopbackHost(host: string): boolean {
+  const match = /^(127\.0\.0\.1|localhost)(?::(\d{1,5}))?$/.exec(host);
+  if (!match) return false;
+  if (!match[2]) return true;
+  const port = Number(match[2]);
+  return port >= 1 && port <= 65_535;
+}
+
+function isSameLoopbackOrigin(origin: string, host: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "http:" && parsed.host.toLowerCase() === host && parsed.origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+function isStateChangingMethod(method: string): boolean {
+  return method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
 }
 
 function asyncRoute(

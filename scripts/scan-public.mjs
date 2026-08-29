@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,12 +16,6 @@ const secretKeys = [
   ["client", "secret"].join("_"),
 ];
 const reservedEmailDomains = new Set(["example.com", "example.org", "example.net"]);
-const forbiddenNameHashes = new Set([
-  "f464d7d71c06e47a535ce441aa202aa717cddeab902a45b0c283aac7a9a090d7",
-  "ff5933a0b5aa7c115582675ad24ff0febf7317a8fbacb8a5878660a396ae32c8",
-  "56d7bf215f1c4fe5637dab07fdf3b61a2aa4d86d0d0843b68ab1444748a9bfaa",
-  "a6397fd87b9f04cf17cc1d13207f2dbd66e0dfe7659474113367387e2127e5fc",
-]);
 const textExtensions = new Set([
   "",
   ".css",
@@ -40,15 +33,11 @@ const textExtensions = new Set([
   ".yaml",
 ]);
 
-function hash(value) {
-  return createHash("sha256").update(value.toLowerCase()).digest("hex");
-}
-
 function publicPath(root, path) {
   return relative(root, path).split(sep).join("/");
 }
 
-function inspectText(contents, path) {
+function inspectText(contents, path, privateTerms) {
   const findings = [];
 
   if (secretKeys.some((key) => new RegExp(`(?:["']?${key}["']?\\s*[:=])`, "i").test(contents))) {
@@ -62,15 +51,15 @@ function inspectText(contents, path) {
     }
   }
 
-  const tokens = contents.toLowerCase().match(/[a-z][a-z0-9-]{2,}/g) ?? [];
-  if (tokens.some((token) => forbiddenNameHashes.has(hash(token)))) {
+  const lowerContents = contents.toLowerCase();
+  if (privateTerms.some((term) => lowerContents.includes(term.toLowerCase()))) {
     findings.push({ rule: "private-name", path });
   }
 
   return findings;
 }
 
-export async function scanTree(root) {
+export async function scanTree(root, { privateTerms = [] } = {}) {
   const findings = [];
 
   async function walk(directory) {
@@ -95,7 +84,7 @@ export async function scanTree(root) {
       }
       if (textExtensions.has(extname(entry.name).toLowerCase())) {
         const contents = await readFile(path, "utf8");
-        findings.push(...inspectText(contents, displayPath));
+        findings.push(...inspectText(contents, displayPath, privateTerms));
       }
     }
   }
@@ -105,7 +94,11 @@ export async function scanTree(root) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const findings = await scanTree(process.cwd());
+  const privateTerms = (process.env.TINYMAILS_PRIVATE_TERMS ?? "")
+    .split(/[\n,]/)
+    .map((term) => term.trim())
+    .filter(Boolean);
+  const findings = await scanTree(process.cwd(), { privateTerms });
   if (findings.length > 0) {
     for (const finding of findings) {
       console.error(`${finding.rule}: ${finding.path}`);
