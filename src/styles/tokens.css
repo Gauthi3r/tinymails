@@ -1,0 +1,60 @@
+/* Adapted from oa-design 0.2.1. See NOTICE.md. */
+:root {
+  --ink: #292929;
+  --background: #f6f6f6;
+  --card: #fefefe;
+  --popover: #fefefe;
+  --foreground: var(--ink);
+  --card-foreground: var(--ink);
+  --border: color-mix(in srgb, var(--ink) 12%, transparent);
+  --input: color-mix(in srgb, var(--ink) 14%, transparent);
+  --accent: color-mix(in srgb, var(--ink) 5%, transparent);
+  --accent-foreground: var(--ink);
+  --muted: color-mix(in srgb, var(--ink) 5%, transparent);
+  --muted-foreground: #6d6d6d;
+  --primary: #305dde;
+  --primary-foreground: #fefefe;
+  --ring: #3ba6f1;
+  --secondary: #e9e9e9;
+  --secondary-foreground: var(--ink);
+  --destructive: oklch(0.637 0.237 25.331);
+  --destructive-foreground: oklch(0.505 0.213 27.518);
+  --success: oklch(0.596 0.145 163.225);
+  --success-foreground: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.555 0.163 48.998);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.488 0.243 264.376);
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-resting: 0 1px 2px rgb(41 41 41 / 6%);
+  --shadow-floating: 0 1px 2px rgb(41 41 41 / 8%), 0 8px 24px rgb(41 41 41 / 8%);
+}
+
+@keyframes oa-arrive {
+  from {
+    opacity: 0.4;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.oa-arrive {
+  animation: oa-arrive 0.3s ease-out;
+  filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oa-arrive {
+    animation: none;
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-29T15:36:00.000Z",
+  "title": "Design System: TinyMails",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "neutral", "displayName": "Soft ink", "canonical": "#292929", "tonalRamp": ["#202020", "#292929", "#414141", "#5a5a5a", "#747474", "#909090", "#c4c4c4", "#eeeeee"] },
+      "stage": { "role": "neutral", "displayName": "Quiet stage", "canonical": "#f6f6f6", "tonalRamp": ["#262626", "#454545", "#656565", "#878787", "#aaaaaa", "#cecece", "#e8e8e8", "#f6f6f6"] },
+      "primary": { "role": "primary", "displayName": "Action blue", "canonical": "#305dde", "tonalRamp": ["#091534", "#122965", "#1d3e98", "#2852c9", "#5277e4", "#809bed", "#b3c4f5", "#e8edfc"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page titles and milestones." },
+      "body": { "displayName": "Body", "purpose": "Interface copy and data rows." },
+      "label": { "displayName": "Label", "purpose": "Metadata and compact controls." }
+    },
+    "shadows": [
+      { "name": "resting", "value": "0 1px 2px rgba(0, 0, 0, 0.06)", "purpose": "Large plates and inset work surfaces." },
+      { "name": "floating", "value": "0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.08)", "purpose": "Primary navigation and anchored surfaces." }
+    ],
+    "motion": [
+      { "name": "state", "value": "160ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Hover, focus, and small state changes." },
+      { "name": "layout", "value": "spring(550, 40)", "purpose": "Shared navigation highlight movement." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The careful outbox",
+    "overview": "A bright, restrained workspace for reviewing small Gmail campaigns before they leave the user's computer.",
+    "keyCharacteristics": ["Restrained operational color", "Compact review density", "Continuous-curvature plates", "State-only motion", "Visible local ownership"],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "Use blue for action, selection, or state, never decoration.", "section": "colors" },
+      { "name": "The Binary Elevation Rule", "body": "A surface is resting or floating.", "section": "elevation" }
+    ],
+    "dos": ["Do make the next safe action visible.", "Do preserve keyboard and reduced-motion access."],
+    "donts": ["Don't reward volume over judgment.", "Don't use generic AI SaaS decoration."]
+  }
+}
