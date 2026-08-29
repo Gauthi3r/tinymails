@@ -68,15 +68,15 @@ export function createApp(dependencies: AppDependencies) {
     const state = singleQuery(request.query.state);
     const code = singleQuery(request.query.code);
     if (!state || !code) {
-      response.status(400).type("html").send(oauthResultPage(false));
+      sendOAuthResult(response, false, 400);
       return;
     }
     try {
       await oauth.finish(state, code);
-      response.type("html").send(oauthResultPage(true));
+      sendOAuthResult(response, true, 200);
     } catch (error) {
       if (error instanceof GoogleOAuthFlowError) {
-        response.status(400).type("html").send(oauthResultPage(false));
+        sendOAuthResult(response, false, 400);
         return;
       }
       throw error;
@@ -327,9 +327,19 @@ function oauthResultPage(connected: boolean): string {
   return `<!doctype html>
 <html lang="en">
   <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${title}</title></head>
-  <body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:2rem;color:#171717">
+  <body>
     <h1>${title}</h1><p>${detail}</p>
-    <script>window.close()</script>
   </body>
 </html>`;
+}
+
+function sendOAuthResult(response: Response, connected: boolean, status: number): void {
+  response
+    .status(status)
+    .set(
+      "Content-Security-Policy",
+      "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    )
+    .type("html")
+    .send(oauthResultPage(connected));
 }

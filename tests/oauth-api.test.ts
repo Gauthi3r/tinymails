@@ -55,6 +55,9 @@ describe("Google connection API", () => {
     expect(oauth.finishes).toEqual([{ state: "oauth-state", code: "authorization-code" }]);
     expect(response.text).toContain("Gmail is connected");
     expect(response.text).not.toContain("authorization-code");
+    expect(response.headers["content-security-policy"]).toBe(
+      "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    );
   });
 
   it("returns the browser-safe session status", async () => {
