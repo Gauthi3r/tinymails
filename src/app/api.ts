@@ -1,3 +1,4 @@
+import type { CreateCampaignInput, CreateCampaignResult } from "../domain/campaigns";
 import type { Account, Campaign, Lead, LeadStatus, Reply } from "../domain/types";
 import type { MergeLeadsResult } from "../domain/leads";
 
@@ -31,6 +32,9 @@ export interface AppApi {
   getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
   sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
   importLeads(source: string, leads: Array<Pick<Lead, "email" | "firstName" | "company">>): Promise<MergeLeadsResult>;
+  createCampaign(input: Omit<CreateCampaignInput, "now">): Promise<CreateCampaignResult>;
+  startCampaign(campaignId: string): Promise<Campaign>;
+  pauseCampaign(campaignId: string): Promise<Campaign>;
 }
 
 export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
@@ -58,6 +62,15 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async importLeads(source, leads) {
       return sendJson(fetcher, "/api/leads/import", { source, leads });
+    },
+    async createCampaign(input) {
+      return sendJson(fetcher, "/api/campaigns", input);
+    },
+    async startCampaign(campaignId) {
+      return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/start`, {})).campaign;
+    },
+    async pauseCampaign(campaignId) {
+      return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/pause`, {})).campaign;
     },
   };
 }

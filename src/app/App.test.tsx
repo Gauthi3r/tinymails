@@ -15,6 +15,10 @@ describe("TinyMails app shell", () => {
       startGoogleOAuth: async () => ({ sessionId: "session", authorizationUrl: "https://example.com" }),
       getGoogleOAuthStatus: async () => ({ status: "pending" }),
       sendTestEmail: async () => ({ ok: true, messageId: "message" }),
+      importLeads: async () => ({ leads: [], added: 0, existing: 0, enriched: 0, duplicate: 0, invalid: 0 }),
+      createCampaign: async () => { throw new Error("Not used"); },
+      startCampaign: async () => { throw new Error("Not used"); },
+      pauseCampaign: async () => { throw new Error("Not used"); },
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",
@@ -39,6 +43,10 @@ describe("TinyMails app shell", () => {
       startGoogleOAuth: async () => ({ sessionId: "session", authorizationUrl: "https://example.com" }),
       getGoogleOAuthStatus: async () => ({ status: "pending" }),
       sendTestEmail: async () => ({ ok: true, messageId: "message" }),
+      importLeads: async () => ({ leads: [], added: 0, existing: 0, enriched: 0, duplicate: 0, invalid: 0 }),
+      createCampaign: async () => { throw new Error("Not used"); },
+      startCampaign: async () => { throw new Error("Not used"); },
+      pauseCampaign: async () => { throw new Error("Not used"); },
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",

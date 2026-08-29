@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { normalizeEmail } from "./email";
+export { renderMessage } from "./personalization";
 import type { Campaign, ContactInput } from "./types";
 
 export interface CreateCampaignInput {
@@ -94,12 +95,6 @@ function blockedReason(email: string, blocks: CampaignBlocks): ExclusionReason |
   if (blocks.bounced.has(email)) return "bounced";
   if (blocks.queued.has(email)) return "queued";
   return null;
-}
-
-export function renderMessage(template: string, contact: ContactInput): string {
-  return template
-    .replaceAll("{firstName}", contact.firstName?.trim() || "there")
-    .replaceAll("{company}", contact.company?.trim() || "your company");
 }
 
 export function sentToday(

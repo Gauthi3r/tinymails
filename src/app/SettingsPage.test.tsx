@@ -73,6 +73,10 @@ function connectionApi(account: PublicAccount) {
     })),
     getGoogleOAuthStatus: vi.fn(async () => ({ status: "connected" as const, account })),
     sendTestEmail: vi.fn(async () => ({ ok: true as const, messageId: "message-1" })),
+    importLeads: vi.fn(),
+    createCampaign: vi.fn(),
+    startCampaign: vi.fn(),
+    pauseCampaign: vi.fn(),
   } satisfies AppApi;
 }
 
