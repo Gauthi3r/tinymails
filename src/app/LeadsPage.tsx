@@ -1,29 +1,31 @@
-import { Search, UsersRound } from "lucide-react";
+import { Search, Upload, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
 import { SquircleSurface } from "../components/squircle-card";
 import type { AppApi, LeadsResponse } from "./api";
 import { PageFrame } from "./CampaignsPage";
+import { CsvImportPanel } from "./CsvImportPanel";
 
 export function LeadsPage({ api }: { api: AppApi }) {
   const [data, setData] = useState<LeadsResponse | null>(null);
   const [query, setQuery] = useState("");
   const [source, setSource] = useState("");
   const [error, setError] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  async function refresh() {
+    setData(await api.getLeads());
+  }
 
   useEffect(() => {
     let active = true;
-    void api
-      .getLeads()
-      .then((response) => {
-        if (active) setData(response);
-      })
-      .catch(() => {
-        if (active) setError(true);
-      });
-    return () => {
-      active = false;
-    };
+    void api.getLeads().then((response) => {
+      if (active) setData(response);
+    }).catch(() => {
+      if (active) setError(true);
+    });
+    return () => { active = false; };
   }, [api]);
 
   const filtered = useMemo(() => {
@@ -45,6 +47,7 @@ export function LeadsPage({ api }: { api: AppApi }) {
       description="Status is derived from real campaign history and the do-not-contact list."
     >
       {error ? <NoticeStrip claim="Leads are unavailable.">Check that the local service is running.</NoticeStrip> : null}
+      {importOpen ? <CsvImportPanel api={api} onClose={() => setImportOpen(false)} onImported={refresh} /> : null}
       <div className="flex flex-col gap-3 sm:flex-row">
         <label className="relative flex-1">
           <span className="sr-only">Search leads</span>
@@ -68,6 +71,9 @@ export function LeadsPage({ api }: { api: AppApi }) {
             {data?.sources.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
+        <Button variant="secondary" onClick={() => setImportOpen((open) => !open)}>
+          <Upload className="size-4" aria-hidden="true" /> Import CSV
+        </Button>
       </div>
       <SquircleSurface className="overflow-hidden border border-border shadow-[var(--shadow-resting)]">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">

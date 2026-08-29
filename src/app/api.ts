@@ -1,4 +1,5 @@
 import type { Account, Campaign, Lead, LeadStatus, Reply } from "../domain/types";
+import type { MergeLeadsResult } from "../domain/leads";
 
 export type PublicAccount = Omit<Account, "credentialDirectory">;
 export type LeadView = Lead & { status: LeadStatus };
@@ -29,6 +30,7 @@ export interface AppApi {
   startGoogleOAuth(client: unknown): Promise<{ sessionId: string; authorizationUrl: string }>;
   getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
   sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
+  importLeads(source: string, leads: Array<Pick<Lead, "email" | "firstName" | "company">>): Promise<MergeLeadsResult>;
 }
 
 export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
@@ -53,6 +55,9 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async sendTestEmail(accountId) {
       return sendJson(fetcher, `/api/accounts/${encodeURIComponent(accountId)}/test-send`, {});
+    },
+    async importLeads(source, leads) {
+      return sendJson(fetcher, "/api/leads/import", { source, leads });
     },
   };
 }
