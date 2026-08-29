@@ -276,6 +276,101 @@ describe("local API", () => {
       .expect(202);
   });
 
+  it("stops a paused campaign and releases every unsent recipient", async () => {
+    const created = await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Product update",
+        subject: "A short update",
+        body: "Hi there",
+        accountIds: ["account-1"],
+        dailyCap: 25,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com" }, { email: "waiting@example.com" }],
+      })
+      .expect(201);
+
+    const stopped = await request(app)
+      .post(`/api/campaigns/${created.body.campaign.id}/stop`)
+      .send({})
+      .expect(200);
+
+    expect(stopped.body.campaign).toMatchObject({
+      status: "stopped",
+      recipients: [
+        { email: "ready@example.com", status: "not-sent" },
+        { email: "waiting@example.com", status: "not-sent" },
+      ],
+    });
+
+    const replacement = await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Replacement",
+        subject: "A short update",
+        body: "Hi there",
+        accountIds: ["account-1"],
+        dailyCap: 25,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com" }],
+      })
+      .expect(201);
+
+    expect(replacement.body.campaign.recipients).toHaveLength(1);
+  });
+
+  it("requires a campaign to be paused before stopping it", async () => {
+    const created = await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Product update",
+        subject: "A short update",
+        body: "Hi there",
+        accountIds: ["account-1"],
+        dailyCap: 25,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com" }],
+      })
+      .expect(201);
+    await repositories.campaigns.update(created.body.campaign.id, (campaign) => ({
+      ...campaign,
+      status: "running",
+    }));
+
+    await request(app)
+      .post(`/api/campaigns/${created.body.campaign.id}/stop`)
+      .send({})
+      .expect(409, { error: "Pause this campaign before stopping it." });
+  });
+
+  it("does not stop while an in-flight delivery is still settling", async () => {
+    const created = await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Product update",
+        subject: "A short update",
+        body: "Hi there",
+        accountIds: ["account-1"],
+        dailyCap: 25,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com" }],
+      })
+      .expect(201);
+    await repositories.campaigns.update(created.body.campaign.id, (campaign) => ({
+      ...campaign,
+      recipients: campaign.recipients.map((recipient) => ({ ...recipient, status: "sending" })),
+    }));
+
+    await request(app)
+      .post(`/api/campaigns/${created.body.campaign.id}/stop`)
+      .send({})
+      .expect(409, { error: "Wait for the in-flight delivery to settle before stopping this campaign." });
+  });
+
   it("returns a bounded validation error for malformed imports", async () => {
     const response = await request(app)
       .post("/api/leads/import")

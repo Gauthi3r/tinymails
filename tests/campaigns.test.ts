@@ -10,7 +10,7 @@ import type { Campaign } from "../src/domain/types";
 const now = "2026-08-29T10:00:00.000Z";
 
 describe("campaign rules", () => {
-  it("excludes duplicate, bounced, suppressed, and queued recipients", () => {
+  it("excludes duplicate, suppressed, and queued recipients", () => {
     const result = createCampaign(
       {
         name: "Product update",
@@ -24,14 +24,12 @@ describe("campaign rules", () => {
           { email: "ready@example.com" },
           { email: "READY@example.com" },
           { email: "blocked@example.com" },
-          { email: "bounce@example.com" },
           { email: "queued@example.com" },
         ],
         now,
       },
       {
         suppressed: new Set(["blocked@example.com"]),
-        bounced: new Set(["bounce@example.com"]),
         queued: new Set(["queued@example.com"]),
       },
     );
@@ -40,7 +38,6 @@ describe("campaign rules", () => {
       "ready@example.com",
     ]);
     expect(result.excluded.map((item) => item.reason).sort()).toEqual([
-      "bounced",
       "do-not-contact",
       "duplicate",
       "queued",
@@ -64,7 +61,7 @@ describe("campaign rules", () => {
         ],
         now,
       },
-      { suppressed: new Set(), bounced: new Set(), queued: new Set() },
+      { suppressed: new Set(), queued: new Set() },
     );
 
     expect(result.campaign.recipients.map((recipient) => recipient.accountId)).toEqual([
@@ -90,7 +87,6 @@ describe("campaign rules", () => {
         },
         {
           suppressed: new Set(["blocked@example.com"]),
-          bounced: new Set(),
           queued: new Set(),
         },
       ),

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { normalizeEmail } from "../domain/email";
-import type { Account, Campaign, Lead, Reply, Template } from "../domain/types";
+import type { Account, Campaign, Lead, Template } from "../domain/types";
 import { JsonStore } from "./json-store";
 
 interface Identified {
@@ -57,6 +57,16 @@ export class CollectionRepository<T extends Identified> {
       records[index] = updated;
       await this.store.write(records);
       return structuredClone(updated);
+    });
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.queue.run(async () => {
+      const records = await this.store.read();
+      const remaining = records.filter((item) => item.id !== id);
+      if (remaining.length === records.length) return false;
+      await this.store.write(remaining);
+      return true;
     });
   }
 }
@@ -148,7 +158,6 @@ export interface Repositories {
   campaigns: CollectionRepository<Campaign>;
   leads: LeadRepository;
   templates: CollectionRepository<Template>;
-  replies: CollectionRepository<Reply>;
   suppression: SuppressionListRepository;
 }
 
@@ -158,7 +167,6 @@ export function createRepositories(dataDir: string): Repositories {
     campaigns: new CollectionRepository(new JsonStore(join(dataDir, "campaigns.json"), [])),
     leads: new LeadRepository(new JsonStore(join(dataDir, "leads.json"), [])),
     templates: new CollectionRepository(new JsonStore(join(dataDir, "templates.json"), [])),
-    replies: new CollectionRepository(new JsonStore(join(dataDir, "replies.json"), [])),
     suppression: new SuppressionListRepository(join(dataDir, "suppression.txt")),
   };
 }

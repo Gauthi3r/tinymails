@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
 import { normalizeEmail } from "../domain/email";
 import type { Account } from "../domain/types";
@@ -173,6 +173,21 @@ export class GoogleOAuthService {
     if (!session) return { status: "failed", message: "This Google authorization session was not found." };
     if (session.result.status === "pending" && this.isExpired(session)) this.expire(session);
     return structuredClone(session.result);
+  }
+
+  async disconnect(accountId: string): Promise<void> {
+    await this.serializeAccountMutation(async () => {
+      const account = await this.options.accounts.get(accountId);
+      if (!account) throw new GoogleOAuthFlowError("This Gmail account is not connected.");
+      const accountsRoot = resolve(this.options.dataDir, "accounts");
+      const credentialDirectory = resolve(this.options.dataDir, account.credentialDirectory);
+      if (!credentialDirectory.startsWith(`${accountsRoot}${sep}`)) {
+        throw new GoogleOAuthFlowError("TinyMails refused to remove an unsafe credential path.");
+      }
+      await this.options.vault.delete(accountId);
+      await rm(credentialDirectory, { recursive: true, force: true });
+      await this.options.accounts.delete(accountId);
+    });
   }
 
   private isExpired(session: PendingSession): boolean {

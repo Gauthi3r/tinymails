@@ -2,8 +2,6 @@ import type { Account, OutgoingMessage } from "../domain/types";
 import type {
   AccountStatus,
   GmailAccountAdapter,
-  InboxCursor,
-  InboundResult,
   SendResult,
 } from "./adapter";
 
@@ -33,7 +31,4 @@ export class FakeGmailAccountAdapter implements GmailAccountAdapter {
     return result;
   }
 
-  async listInbound(_account: Account, cursor?: InboxCursor): Promise<InboundResult> {
-    return { messages: [], ...(cursor ? { cursor } : {}) };
-  }
 }

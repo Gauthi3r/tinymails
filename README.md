@@ -8,7 +8,7 @@ This repository contains the source-first v0.1 release candidate. It includes th
 
 - Imports and enriches contacts without overwriting known values.
 - Derives contact status from campaign history and the do-not-contact list.
-- Excludes duplicates, bounces, suppressed addresses, and contacts already queued elsewhere.
+- Excludes duplicates, suppressed addresses, and contacts already queued elsewhere.
 - Persists campaign state after each send and flags interrupted deliveries for manual review.
 - Enforces account caps, sending windows, and delays at the Gmail boundary.
 - Connects a user-owned Google Desktop OAuth client with send-only access.
@@ -17,7 +17,7 @@ This repository contains the source-first v0.1 release candidate. It includes th
 - Exports a portable backup without credential metadata or tokens.
 - Keeps Gmail access behind an adapter with no network calls in tests.
 
-TinyMails does not insert tracking pixels, host contact data, write email copy with AI, automate follow-ups, or provide a managed OAuth application.
+TinyMails does not insert tracking pixels, host contact data, write email copy with AI, automate follow-ups, read the inbox, detect replies or bounces, restore backup files, or provide a managed OAuth application.
 
 ## Requirements
 
@@ -54,6 +54,8 @@ Google can show an unverified-app notice for a personal Testing configuration. T
 
 Client metadata stays under the local TinyMails data directory with user-only permissions. Tokens go to the operating-system credential vault. Neither is uploaded to a TinyMails service.
 
+Settings can disconnect a Gmail account and remove its local OAuth client and token. To revoke the grant at Google as well, remove TinyMails from your [Google Account connections](https://myaccount.google.com/connections).
+
 For UI development, run the API and Vite in separate terminals:
 
 ```bash
@@ -79,7 +81,9 @@ TinyMails stores runtime data in `~/.tinymails` by default. Set `TINYMAILS_DATA_
 TINYMAILS_DATA_DIR=/path/to/tinymails-data npm run serve
 ```
 
-Do not point this at the source checkout. The public-tree scanner rejects credential files, token keys, logs, root CSV files, and non-example email addresses.
+Do not point this at the source checkout. The public-tree scanner rejects credential files, token-shaped values, logs, root CSV files, and non-example email addresses.
+
+To erase all TinyMails contacts, campaigns, templates, and suppression data, stop the app and remove the data directory shown in Settings. Disconnect each Gmail account first so its token is also removed from the operating-system credential vault. TinyMails does not yet provide selective contact deletion or backup restore.
 
 ## Checks
 
@@ -98,7 +102,7 @@ Only contact people who expect to hear from you. Keep lists small, honor removal
 
 ## Roadmap
 
-The next useful additions are campaign cloning, lead editing, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The approved [v0.1 design](docs/superpowers/specs/2026-08-29-tinymails-v0.1-design.md) records the product and safety decisions behind this release.
+The next useful additions are campaign cloning, lead editing and deletion, backup restore, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The [v0.1 design record](docs/superpowers/specs/2026-08-29-tinymails-v0.1-design.md) records the product and safety decisions behind this release.
 
 ## License
 

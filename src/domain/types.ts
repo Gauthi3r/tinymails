@@ -6,13 +6,11 @@ export type RecipientStatus =
   | "skipped"
   | "not-sent";
 export type CampaignStatus = "running" | "paused" | "done" | "stopped";
-export type GmailCapability = "send" | "inbox-tracking";
+export type GmailCapability = "send";
 export type LeadStatus =
   | "new"
   | "queued"
   | "contacted"
-  | "replied"
-  | "bounced"
   | "do-not-contact";
 
 export interface SendingWindow {
@@ -53,8 +51,6 @@ export interface Recipient extends ContactInput {
   sentAt?: string;
   failedAt?: string;
   error?: string;
-  repliedAt?: string;
-  bouncedAt?: string;
 }
 
 export interface Campaign {
@@ -79,17 +75,6 @@ export interface Template {
   subject: string;
   body: string;
   updatedAt: string;
-}
-
-export interface Reply {
-  id: string;
-  accountId: string;
-  campaignId?: string;
-  email: string;
-  subject: string;
-  snippet: string;
-  receivedAt: string;
-  kind: "reply" | "bounce";
 }
 
 export interface OutgoingMessage {

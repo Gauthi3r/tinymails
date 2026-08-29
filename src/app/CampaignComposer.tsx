@@ -42,7 +42,6 @@ export function CampaignComposer({
       setLeads(leadData);
       setSettings(settingsData);
       setTemplates(templateData);
-      setSelectedEmails(new Set(leadData.leads.filter((lead) => lead.status === "new").map((lead) => lead.email)));
       setSelectedAccounts(new Set(settingsData.accounts.slice(0, 1).map((account) => account.id)));
     }).catch(() => {
       if (active) setMessage("TinyMails could not load leads and delivery settings.");
@@ -154,6 +153,10 @@ export function CampaignComposer({
             source={source}
             setSource={setSource}
             toggleEmail={toggleEmail}
+            selectAll={() => setSelectedEmails((current) => new Set([
+              ...current,
+              ...available.map((lead) => lead.email),
+            ]))}
           />
         ) : null}
         {step === 1 ? (
@@ -216,13 +219,14 @@ export function CampaignComposer({
   );
 }
 
-function RecipientsStep({ data, available, selected, source, setSource, toggleEmail }: {
+function RecipientsStep({ data, available, selected, source, setSource, toggleEmail, selectAll }: {
   data: LeadsResponse | null;
   available: LeadsResponse["leads"];
   selected: Set<string>;
   source: string;
   setSource: (source: string) => void;
   toggleEmail: (email: string) => void;
+  selectAll: () => void;
 }) {
   const selectedCount = (data?.leads ?? []).filter((lead) => lead.status === "new" && selected.has(lead.email)).length;
   return (
@@ -231,13 +235,18 @@ function RecipientsStep({ data, available, selected, source, setSource, toggleEm
         <div>
           <p className="mt-1 text-sm text-muted-foreground">{selectedCount} available leads selected</p>
         </div>
-        <label className="text-xs font-medium text-muted-foreground">
-          Source
-          <select value={source} onChange={(event) => setSource(event.target.value)} className="ml-2 h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
-            <option value="">All sources</option>
-            {data?.sources.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </label>
+        <div className="flex items-end gap-2">
+          <Button variant="secondary" size="sm" onClick={selectAll} disabled={available.length === 0}>
+            Select all available
+          </Button>
+          <label className="text-xs font-medium text-muted-foreground">
+            Source
+            <select value={source} onChange={(event) => setSource(event.target.value)} className="ml-2 h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
+              <option value="">All sources</option>
+              {data?.sources.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
       {data && data.leads.some((lead) => lead.status !== "new") ? (
         <p className="mt-4 rounded-xl bg-secondary px-4 py-3 text-xs text-muted-foreground">

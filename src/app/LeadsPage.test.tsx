@@ -51,7 +51,6 @@ function fakeApi() {
   return {
     getCampaigns: vi.fn(async () => []),
     getLeads: vi.fn(async () => ({ leads: [], counts: { total: 0 }, sources: [] })),
-    getReplies: vi.fn(async () => []),
     getSettings: vi.fn(async () => ({
       accounts: [],
       dataDir: "/tmp/tinymails-test",

@@ -82,11 +82,18 @@ describe("Google connection API", () => {
       lastTestedAt: expect.any(String),
     });
   });
+
+  it("disconnects an idle Gmail account", async () => {
+    await request(app).post("/api/accounts/account-1/disconnect").send({}).expect(200, { ok: true });
+
+    expect(oauth.disconnects).toEqual(["account-1"]);
+  });
 });
 
 class FakeOAuthCoordinator implements GoogleOAuthCoordinator {
   starts: Array<{ client: unknown; redirectUri: string }> = [];
   finishes: Array<{ state: string; code: string }> = [];
+  disconnects: string[] = [];
   currentStatus: GoogleOAuthStatus = { status: "pending" };
 
   async start(client: unknown, redirectUri: string) {
@@ -104,6 +111,10 @@ class FakeOAuthCoordinator implements GoogleOAuthCoordinator {
 
   status(_sessionId: string): GoogleOAuthStatus {
     return structuredClone(this.currentStatus);
+  }
+
+  async disconnect(accountId: string): Promise<void> {
+    this.disconnects.push(accountId);
   }
 }
 

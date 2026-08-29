@@ -1,38 +1,33 @@
 # Google OAuth verification
 
-Verified on 2026-08-29 against commit `3c5d16f` with Node.js `v22.17.1` and npm `10.9.2`.
+Verified on 2026-08-29 against the current repository state with Node.js 22.
 
 ## Automated evidence
 
-`npm run scan && npm run lint && npm test -- --run && npm run build`
+The full `npm run check` result is recorded in [foundation.md](foundation.md). Focused coverage verifies:
 
-- Public-tree scanner: passed with no findings.
-- Oxlint: passed with no warnings or errors.
-- Vitest: 62 tests passed across 14 files.
-- TypeScript project build: passed.
-- Vite production build: passed with 2,072 modules transformed.
-
-Focused coverage verifies:
-
-- Desktop-client validation and bounded errors.
-- Separate OAuth state and browser session identifiers, PKCE scopes, expiry, and replay rejection.
-- Account-specific client directories with `0600` client files.
-- Operating-system vault isolation for each account.
+- Desktop-client validation and bounded browser-safe errors.
+- Separate OAuth state and browser session identifiers, PKCE, expiry, and replay rejection.
+- Only basic identity and `gmail.send` scopes are requested; previously granted scopes are not folded into the request.
+- Account-specific client directories, `0600` client files, and isolated vault records.
+- Removal of the local client directory, vault token, and account record on disconnect.
 - Unicode message encoding and header-injection rejection.
-- Gmail success, token refresh, auth, retryable, permanent, and ambiguous network outcomes.
-- Loopback callback handling, strict callback-page content security, sanitized session responses, and self-addressed test sends.
-- Inline client-file onboarding, file-size limits, connected state, and test-send feedback.
+- Gmail success, token refresh, authentication, retryable, permanent, and ambiguous delivery outcomes.
+- Loopback callback handling, callback-page content security, sanitized session responses, and self-addressed test sends.
+- Inline client-file onboarding, file-size limits, connected state, sending-rule editing, and disconnect confirmation.
 
-The public scanner and repository checks found no credential artifacts, non-example addresses, runtime data, or private installation names. Browser API responses omit credential directories, OAuth client contents, tokens, authorization codes, and provider error bodies.
+Browser API responses omit credential directories, OAuth client contents, tokens, authorization codes, and provider error bodies.
 
 ## Manual release check
 
-A real authorization and Gmail send are intentionally not part of CI. Before a release, the repository owner should:
+A real authorization, Gmail send, and desktop keyring round trip are intentionally not part of CI. Before a release:
 
-1. Create a disposable Google Cloud project or OAuth client intended for release testing.
+1. Create a disposable Google Cloud project or Desktop OAuth client for release testing.
 2. Add the test Gmail identity according to the project's Google Auth audience mode.
-3. Connect it through Settings and confirm the requested scopes are basic identity plus Gmail send only.
-4. Send the self-addressed test and confirm the message appears once in Gmail Sent.
-5. Restart TinyMails, confirm the account remains usable through the operating-system vault, then remove the disposable OAuth grant and local account data.
+3. Connect it through Settings and confirm the consent screen requests basic identity and Gmail send only.
+4. Send the self-addressed connection test and a one-recipient campaign preview. Confirm each appears once in Gmail Sent.
+5. Restart TinyMails and confirm the account remains usable through the operating-system vault.
+6. Disconnect the account in Settings and confirm its local client directory and credential-vault entry are gone.
+7. Remove the disposable grant from Google Account connections.
 
-Do not put the real Desktop client file or any runtime data in this repository.
+Run the keyring steps on macOS, Windows, and a Linux desktop with a Secret Service-compatible keyring before calling those platforms release-tested. Do not put the real Desktop client file or runtime data in this repository.

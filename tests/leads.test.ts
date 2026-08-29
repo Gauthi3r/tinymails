@@ -41,7 +41,7 @@ describe("lead rules", () => {
       source: "Product beta",
       addedAt: now,
     };
-    const campaign = campaignWithRecipient(lead.email, "sent", { repliedAt: now });
+    const campaign = campaignWithRecipient(lead.email, "sent");
 
     expect(deriveLeadStatus(lead, [campaign], new Set([lead.email]))).toBe("do-not-contact");
   });

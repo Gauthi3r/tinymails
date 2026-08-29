@@ -225,10 +225,6 @@ export class CampaignRunner {
 
   private async finalSafetyError(campaignId: string, email: string): Promise<string | null> {
     const campaigns = await this.dependencies.campaigns.list();
-    const bounced = campaigns.some((campaign) =>
-      campaign.recipients.some((recipient) => recipient.email === email && recipient.bouncedAt),
-    );
-    if (bounced) return "Bounced before send.";
     const others = campaigns.filter((campaign) => campaign.id !== campaignId);
     const matching = others.flatMap((campaign) =>
       campaign.recipients

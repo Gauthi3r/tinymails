@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, MailPlus, Pause, Play, Plus, Send } from "lucide-react";
+import { Ban, ChevronDown, ChevronUp, MailPlus, Pause, Play, Plus, Send } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
@@ -13,6 +13,7 @@ export function CampaignsPage({ api }: { api: AppApi }) {
   const [composing, setComposing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const hasRunningCampaign = campaigns?.some((campaign) => campaign.status === "running") ?? false;
 
   useEffect(() => {
     let active = true;
@@ -30,12 +31,12 @@ export function CampaignsPage({ api }: { api: AppApi }) {
   }, [api]);
 
   useEffect(() => {
-    if (!campaigns?.some((campaign) => campaign.status === "running")) return;
+    if (!hasRunningCampaign) return;
     const interval = window.setInterval(() => {
       void api.getCampaigns().then(setCampaigns).catch(() => undefined);
     }, 2_000);
     return () => window.clearInterval(interval);
-  }, [api, campaigns]);
+  }, [api, hasRunningCampaign]);
 
   async function changeStatus(campaign: Campaign, action: "start" | "pause") {
     setActionId(campaign.id);
@@ -60,6 +61,19 @@ export function CampaignsPage({ api }: { api: AppApi }) {
       setCampaigns((current) => (current ?? []).map((record) => record.id === updated.id ? updated : record));
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "The campaign preview could not be sent.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function stopCampaign(campaign: Campaign) {
+    setActionId(campaign.id);
+    setError(null);
+    try {
+      const updated = await api.stopCampaign(campaign.id);
+      setCampaigns((current) => (current ?? []).map((record) => record.id === updated.id ? updated : record));
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "The campaign could not be stopped.");
     } finally {
       setActionId(null);
     }
@@ -134,15 +148,20 @@ export function CampaignsPage({ api }: { api: AppApi }) {
                         <Pause className="size-3.5" aria-hidden="true" /> Pause
                       </Button>
                     ) : campaign.status === "paused" && campaign.recipients.some((recipient) => recipient.status === "pending") ? (
-                      campaign.testedAt ? (
-                        <Button size="xs" loading={actionId === campaign.id} onClick={() => void changeStatus(campaign, "start")} aria-label={`Start ${campaign.name}`}>
-                          <Play className="size-3.5" aria-hidden="true" /> Start
+                      <>
+                        {campaign.testedAt ? (
+                          <Button size="xs" loading={actionId === campaign.id} onClick={() => void changeStatus(campaign, "start")} aria-label={`Start ${campaign.name}`}>
+                            <Play className="size-3.5" aria-hidden="true" /> Start
+                          </Button>
+                        ) : (
+                          <Button variant="secondary" size="xs" loading={actionId === campaign.id} onClick={() => void testCampaign(campaign)} aria-label={`Test ${campaign.name}`}>
+                            <Send className="size-3.5" aria-hidden="true" /> Send test
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="xs" loading={actionId === campaign.id} onClick={() => void stopCampaign(campaign)} aria-label={`Stop ${campaign.name}`}>
+                          <Ban className="size-3.5" aria-hidden="true" /> Stop
                         </Button>
-                      ) : (
-                        <Button variant="secondary" size="xs" loading={actionId === campaign.id} onClick={() => void testCampaign(campaign)} aria-label={`Test ${campaign.name}`}>
-                          <Send className="size-3.5" aria-hidden="true" /> Send test
-                        </Button>
-                      )
+                      </>
                     ) : null}
                   </div>
                 </div>

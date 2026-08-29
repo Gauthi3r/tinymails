@@ -17,11 +17,10 @@ export interface CreateCampaignInput {
 
 export interface CampaignBlocks {
   suppressed: Set<string>;
-  bounced: Set<string>;
   queued: Set<string>;
 }
 
-export type ExclusionReason = "invalid" | "duplicate" | "do-not-contact" | "bounced" | "queued";
+export type ExclusionReason = "invalid" | "duplicate" | "do-not-contact" | "queued";
 
 export interface CampaignExclusion {
   email: string;
@@ -92,7 +91,6 @@ export function createCampaign(
 
 function blockedReason(email: string, blocks: CampaignBlocks): ExclusionReason | null {
   if (blocks.suppressed.has(email)) return "do-not-contact";
-  if (blocks.bounced.has(email)) return "bounced";
   if (blocks.queued.has(email)) return "queued";
   return null;
 }

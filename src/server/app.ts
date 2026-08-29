@@ -16,6 +16,7 @@ export interface GoogleOAuthCoordinator {
   start(clientJson: unknown, redirectUri: string): Promise<{ sessionId: string; authorizationUrl: string }>;
   finish(oauthState: string, code: string): Promise<{ accountId: string }>;
   status(sessionId: string): GoogleOAuthStatus;
+  disconnect(accountId: string): Promise<void>;
 }
 
 export interface AppDependencies {
@@ -127,6 +128,25 @@ export function createApp(dependencies: AppDependencies) {
     response.json({ account: publicAccount(account as Account) });
   }));
 
+  app.post("/api/accounts/:id/disconnect", asyncRoute(async (request, response) => {
+    const accountId = firstParam(request.params.id);
+    if (!(await dependencies.repositories.accounts.get(accountId))) {
+      response.status(404).json({ error: "Gmail account not found." });
+      return;
+    }
+    const activeCampaign = (await dependencies.repositories.campaigns.list()).some((campaign) =>
+      campaign.accountIds.includes(accountId)
+      && (campaign.status === "running" || campaign.status === "paused")
+      && campaign.recipients.some((recipient) => recipient.status === "pending" || recipient.status === "sending"),
+    );
+    if (activeCampaign) {
+      response.status(409).json({ error: "Stop campaigns assigned to this Gmail account before disconnecting it." });
+      return;
+    }
+    await requireOAuth(dependencies).disconnect(accountId);
+    response.json({ ok: true });
+  }));
+
   app.get("/api/leads", asyncRoute(async (_request, response) => {
     const [leads, campaigns, suppressed] = await Promise.all([
       dependencies.repositories.leads.list(),
@@ -179,11 +199,6 @@ export function createApp(dependencies: AppDependencies) {
     let result: ReturnType<typeof createCampaign>;
     try {
       result = await dependencies.repositories.campaigns.createFromSnapshot((campaigns) => {
-        const bounced = new Set(
-          campaigns.flatMap((campaign) =>
-            campaign.recipients.filter((recipient) => recipient.bouncedAt).map((recipient) => recipient.email),
-          ),
-        );
         const queued = new Set(
           campaigns.flatMap((campaign) =>
             campaign.status === "running" || campaign.status === "paused"
@@ -193,7 +208,7 @@ export function createApp(dependencies: AppDependencies) {
               : [],
           ),
         );
-        const created = createCampaign(input, { suppressed, bounced, queued });
+        const created = createCampaign(input, { suppressed, queued });
         return { record: created.campaign, result: created };
       });
     } catch (error) {
@@ -307,6 +322,41 @@ export function createApp(dependencies: AppDependencies) {
     response.json({ campaign });
   }));
 
+  app.post("/api/campaigns/:id/stop", asyncRoute(async (request, response) => {
+    const campaignId = firstParam(request.params.id);
+    const existing = await dependencies.repositories.campaigns.get(campaignId);
+    if (!existing) {
+      response.status(404).json({ error: "Campaign not found." });
+      return;
+    }
+    if (existing.status !== "paused") {
+      response.status(409).json({ error: "Pause this campaign before stopping it." });
+      return;
+    }
+    if (existing.recipients.some((recipient) => recipient.status === "sending")) {
+      response.status(409).json({ error: "Wait for the in-flight delivery to settle before stopping this campaign." });
+      return;
+    }
+    const campaign = await dependencies.repositories.campaigns.update(
+      campaignId,
+      (record) => ({
+        ...record,
+        status: "stopped",
+        pauseReason: undefined,
+        recipients: record.recipients.map((recipient) =>
+          recipient.status === "pending"
+            ? { ...recipient, status: "not-sent", error: undefined }
+            : recipient,
+        ),
+      }),
+    );
+    if (!campaign) {
+      response.status(404).json({ error: "Campaign not found." });
+      return;
+    }
+    response.json({ campaign });
+  }));
+
   app.get("/api/templates", asyncRoute(async (_request, response) => {
     response.json({ templates: await dependencies.repositories.templates.list() });
   }));
@@ -325,10 +375,6 @@ export function createApp(dependencies: AppDependencies) {
     };
     await dependencies.repositories.templates.save(template);
     response.status(201).json({ template });
-  }));
-
-  app.get("/api/replies", asyncRoute(async (_request, response) => {
-    response.json({ replies: await dependencies.repositories.replies.list() });
   }));
 
   app.get("/api/suppression", asyncRoute(async (_request, response) => {
@@ -353,12 +399,11 @@ export function createApp(dependencies: AppDependencies) {
   }));
 
   app.get("/api/backup", asyncRoute(async (_request, response) => {
-    const [accounts, campaigns, leads, templates, replies, suppression] = await Promise.all([
+    const [accounts, campaigns, leads, templates, suppression] = await Promise.all([
       dependencies.repositories.accounts.list(),
       dependencies.repositories.campaigns.list(),
       dependencies.repositories.leads.list(),
       dependencies.repositories.templates.list(),
-      dependencies.repositories.replies.list(),
       dependencies.repositories.suppression.list(),
     ]);
     const exportedAt = clock().toISOString();
@@ -374,7 +419,6 @@ export function createApp(dependencies: AppDependencies) {
           campaigns,
           leads,
           templates,
-          replies,
           suppression,
         },
       });

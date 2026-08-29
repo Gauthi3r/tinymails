@@ -14,6 +14,8 @@ describe("campaign composer", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
     expect(await screen.findByRole("heading", { name: "Recipients" })).toBeVisible();
+    expect(screen.getByText("0 available leads selected")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Select all available" }));
     expect(screen.getByText("2 available leads selected")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Continue to Write" }));
 
@@ -52,6 +54,7 @@ describe("campaign composer", () => {
     render(<CampaignsPage api={api} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await userEvent.click(screen.getByRole("button", { name: "Select all available" }));
     await userEvent.click(screen.getByRole("button", { name: "Continue to Write" }));
     await userEvent.type(screen.getByLabelText("Campaign name"), "Beta note");
     await userEvent.type(screen.getByLabelText("Subject"), "Hello");
@@ -80,6 +83,8 @@ describe("campaign composer", () => {
     expect(api.startCampaign).toHaveBeenCalledWith("campaign-1");
     await userEvent.click(await screen.findByRole("button", { name: "Pause Beta note" }));
     expect(api.pauseCampaign).toHaveBeenCalledWith("campaign-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Stop Beta note" }));
+    expect(api.stopCampaign).toHaveBeenCalledWith("campaign-1");
   });
 
   it("shows the reason an automatic pause cannot make progress", async () => {
@@ -89,6 +94,7 @@ describe("campaign composer", () => {
 
     expect(await screen.findByText("Outside the Gmail account's sending window.")).toBeVisible();
   });
+
 });
 
 function campaignFixture(): Campaign {
@@ -123,7 +129,6 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
       counts: { total: 3, new: 2, contacted: 1 },
       sources: ["Beta"],
     })),
-    getReplies: vi.fn(async () => []),
     getSettings: vi.fn(async () => ({
       accounts: [{
         id: "account-1",
@@ -150,6 +155,11 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
     testCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z" })),
     startCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z", status: "running" as const })),
     pauseCampaign: vi.fn(async () => campaign),
+    stopCampaign: vi.fn(async () => ({
+      ...campaign,
+      status: "stopped" as const,
+      recipients: campaign.recipients.map((recipient) => ({ ...recipient, status: "not-sent" as const })),
+    })),
     suppressEmails: vi.fn(),
     getTemplates: vi.fn(async () => []),
     saveTemplate: vi.fn(),

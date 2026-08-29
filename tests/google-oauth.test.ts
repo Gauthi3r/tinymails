@@ -154,6 +154,18 @@ describe("Google OAuth sessions", () => {
     });
   });
 
+  it("disconnects an account and removes its local credentials", async () => {
+    await service.start(desktopClient(), "http://127.0.0.1:3210/api/oauth/google/callback");
+    await service.finish(provider.authorizations[0].state, "authorization-code");
+    const clientPath = join(dataDir, "accounts", "account-1", "client.json");
+
+    await service.disconnect("account-1");
+
+    expect(await repositories.accounts.get("account-1")).toBeNull();
+    expect(await vault.get("account-1")).toBeNull();
+    await expect(stat(clientPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("records a browser-safe failure without exposing the provider error", async () => {
     const started = await service.start(desktopClient(), "http://127.0.0.1:3210/api/oauth/google/callback");
     provider.exchangeError = new Error("raw provider response with private detail");

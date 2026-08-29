@@ -1,5 +1,5 @@
 import type { CreateCampaignInput, CreateCampaignResult } from "../domain/campaigns";
-import type { Account, Campaign, Lead, LeadStatus, Reply, Template } from "../domain/types";
+import type { Account, Campaign, Lead, LeadStatus, Template } from "../domain/types";
 import type { MergeLeadsResult } from "../domain/leads";
 
 export type PublicAccount = Omit<Account, "credentialDirectory">;
@@ -26,11 +26,11 @@ export type GoogleOAuthStatus =
 export interface AppApi {
   getCampaigns(): Promise<Campaign[]>;
   getLeads(): Promise<LeadsResponse>;
-  getReplies(): Promise<Reply[]>;
   getSettings(): Promise<SettingsResponse>;
   startGoogleOAuth(client: unknown): Promise<{ sessionId: string; authorizationUrl: string }>;
   getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
   sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
+  disconnectGoogleAccount(accountId: string): Promise<void>;
   updateAccount(
     accountId: string,
     input: Pick<Account, "dailyCap" | "delayMinSeconds" | "delayMaxSeconds" | "timeZone" | "sendingWindow">,
@@ -40,6 +40,7 @@ export interface AppApi {
   testCampaign(campaignId: string): Promise<Campaign>;
   startCampaign(campaignId: string): Promise<Campaign>;
   pauseCampaign(campaignId: string): Promise<Campaign>;
+  stopCampaign(campaignId: string): Promise<Campaign>;
   suppressEmails(emails: string[]): Promise<string[]>;
   getTemplates(): Promise<Template[]>;
   saveTemplate(input: Pick<Template, "name" | "subject" | "body">): Promise<Template>;
@@ -53,9 +54,6 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     async getLeads() {
       return getJson<LeadsResponse>(fetcher, "/api/leads");
     },
-    async getReplies() {
-      return (await getJson<{ replies: Reply[] }>(fetcher, "/api/replies")).replies;
-    },
     async getSettings() {
       return getJson<SettingsResponse>(fetcher, "/api/settings");
     },
@@ -67,6 +65,9 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async sendTestEmail(accountId) {
       return sendJson(fetcher, `/api/accounts/${encodeURIComponent(accountId)}/test-send`, {});
+    },
+    async disconnectGoogleAccount(accountId) {
+      await sendJson(fetcher, `/api/accounts/${encodeURIComponent(accountId)}/disconnect`, {});
     },
     async updateAccount(accountId, input) {
       return (await sendJson<{ account: PublicAccount }>(
@@ -89,6 +90,9 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async pauseCampaign(campaignId) {
       return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/pause`, {})).campaign;
+    },
+    async stopCampaign(campaignId) {
+      return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/stop`, {})).campaign;
     },
     async suppressEmails(emails) {
       return (await sendJson<{ emails: string[] }>(fetcher, "/api/suppression", { emails })).emails;

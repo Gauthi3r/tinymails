@@ -87,8 +87,6 @@ export function deriveLeadStatus(
   );
 
   if (suppressed.has(email)) return "do-not-contact";
-  if (recipients.some(({ recipient }) => Boolean(recipient.bouncedAt))) return "bounced";
-  if (recipients.some(({ recipient }) => Boolean(recipient.repliedAt))) return "replied";
   if (recipients.some(({ recipient }) => recipient.status === "sent")) return "contacted";
   if (
     recipients.some(

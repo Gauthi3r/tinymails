@@ -5,8 +5,6 @@ import type { Account, OutgoingMessage } from "../domain/types";
 import type {
   AccountStatus,
   GmailAccountAdapter,
-  InboxCursor,
-  InboundResult,
   SendResult,
 } from "./adapter";
 import type { CredentialVault, StoredGoogleTokens } from "./credential-vault";
@@ -90,10 +88,6 @@ export class GoogleGmailAdapter implements GmailAccountAdapter {
       }
       return { ok: false, kind: "permanent", message: "Gmail rejected this message." };
     }
-  }
-
-  async listInbound(_account: Account, cursor?: InboxCursor): Promise<InboundResult> {
-    return { messages: [], ...(cursor ? { cursor } : {}) };
   }
 
   private async transport(account: Account): Promise<GoogleTransport> {

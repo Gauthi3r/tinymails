@@ -1,4 +1,4 @@
-import { Database, Download, ExternalLink, KeyRound, Mail, Send, ShieldCheck, Upload } from "lucide-react";
+import { Database, Download, ExternalLink, KeyRound, Mail, Send, ShieldCheck, Unplug, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
@@ -23,6 +23,8 @@ export function SettingsPage({
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<string | null>(null);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState<string | null>(null);
+  const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
   const displayAccounts = useMemo(() => {
     const accounts = [...(settings?.accounts ?? [])];
@@ -107,6 +109,27 @@ export function SettingsPage({
       });
     }
     setConnectionMessage(`Sending rules saved for ${account.email}.`);
+  }
+
+  async function disconnectAccount(account: PublicAccount) {
+    setDisconnectingAccount(account.id);
+    setConnectionMessage(null);
+    try {
+      await api.disconnectGoogleAccount(account.id);
+      setConnectionAccount((current) => current?.id === account.id ? null : current);
+      if (settings) {
+        onSettingsChange({
+          ...settings,
+          accounts: settings.accounts.filter((record) => record.id !== account.id),
+        });
+      }
+      setConfirmingDisconnect(null);
+      setConnectionMessage(`${account.email} disconnected from this computer.`);
+    } catch (disconnectError) {
+      setConnectionMessage(disconnectError instanceof Error ? disconnectError.message : "Gmail could not be disconnected.");
+    } finally {
+      setDisconnectingAccount(null);
+    }
   }
 
   return (
@@ -200,6 +223,15 @@ export function SettingsPage({
                     >
                       <Send className="size-3.5" aria-hidden="true" /> Test
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      loading={disconnectingAccount === account.id}
+                      onClick={() => setConfirmingDisconnect(account.id)}
+                      aria-label={`Disconnect ${account.email}`}
+                    >
+                      <Unplug className="size-3.5" aria-hidden="true" /> Disconnect
+                    </Button>
                   </span>
                 }
                 className="min-h-16"
@@ -211,6 +243,23 @@ export function SettingsPage({
                   onCancel={() => setEditingAccount(null)}
                   onSaved={accountRulesSaved}
                 />
+              ) : null}
+              {confirmingDisconnect === account.id ? (
+                <div className="flex flex-col gap-3 border-t border-border bg-card px-4 py-4 text-xs text-muted-foreground">
+                  <p>This removes the local OAuth client and token. It does not revoke access in your Google Account.</p>
+                  <span className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      loading={disconnectingAccount === account.id}
+                      onClick={() => void disconnectAccount(account)}
+                      aria-label={`Confirm disconnect ${account.email}`}
+                    >
+                      Confirm disconnect
+                    </Button>
+                    <Button variant="ghost" size="xs" onClick={() => setConfirmingDisconnect(null)}>Cancel</Button>
+                  </span>
+                </div>
               ) : null}
             </div>
           ))}

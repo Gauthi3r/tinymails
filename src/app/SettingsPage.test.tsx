@@ -85,13 +85,32 @@ describe("Gmail setup", () => {
     }));
     await waitFor(() => expect(onSettingsChange).toHaveBeenCalled());
   });
+
+  it("requires confirmation before disconnecting Gmail locally", async () => {
+    const account = accountFixture();
+    const api = connectionApi(account);
+    render(
+      <SettingsPage
+        api={api}
+        settings={settingsFixture([account])}
+        error={false}
+        onSettingsChange={() => undefined}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Disconnect sender@example.com" }));
+    expect(api.disconnectGoogleAccount).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm disconnect sender@example.com" }));
+
+    expect(api.disconnectGoogleAccount).toHaveBeenCalledWith("account-1");
+    expect(await screen.findByText("sender@example.com disconnected from this computer.")).toBeVisible();
+  });
 });
 
 function connectionApi(account: PublicAccount) {
   return {
     getCampaigns: vi.fn(async () => []),
     getLeads: vi.fn(async () => ({ leads: [], counts: { total: 0 }, sources: [] })),
-    getReplies: vi.fn(async () => []),
     getSettings: vi.fn(async () => settingsFixture([account])),
     startGoogleOAuth: vi.fn(async () => ({
       sessionId: "session-1",
@@ -99,12 +118,14 @@ function connectionApi(account: PublicAccount) {
     })),
     getGoogleOAuthStatus: vi.fn(async () => ({ status: "connected" as const, account })),
     sendTestEmail: vi.fn(async () => ({ ok: true as const, messageId: "message-1" })),
+    disconnectGoogleAccount: vi.fn(async () => undefined),
     updateAccount: vi.fn(async (_accountId, input) => ({ ...account, ...input })),
     importLeads: vi.fn(),
     createCampaign: vi.fn(),
     testCampaign: vi.fn(),
     startCampaign: vi.fn(),
     pauseCampaign: vi.fn(),
+    stopCampaign: vi.fn(),
     suppressEmails: vi.fn(),
     getTemplates: vi.fn(async () => []),
     saveTemplate: vi.fn(),

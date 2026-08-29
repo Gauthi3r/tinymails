@@ -1,19 +1,17 @@
-import { Inbox, ListFilter, Mail, Settings as SettingsIcon, UsersRound } from "lucide-react";
+import { ListFilter, Mail, Settings as SettingsIcon, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../components/button";
 import { TabBar, type Tab } from "../components/tab-bar";
 import type { AppApi, SettingsResponse } from "./api";
 import { CampaignsPage } from "./CampaignsPage";
 import { LeadsPage } from "./LeadsPage";
-import { RepliesPage } from "./RepliesPage";
 import { SettingsPage } from "./SettingsPage";
 
-type Page = "campaigns" | "leads" | "replies" | "settings";
+type Page = "campaigns" | "leads" | "settings";
 
 const tabs: readonly Tab[] = [
   { id: "campaigns", label: "Campaigns", icon: <ListFilter /> },
   { id: "leads", label: "Leads", icon: <UsersRound /> },
-  { id: "replies", label: "Replies", icon: <Inbox /> },
 ];
 
 export function App({ api }: { api: AppApi }) {
@@ -77,7 +75,6 @@ export function App({ api }: { api: AppApi }) {
       <main className="pt-14">
         {page === "campaigns" ? <CampaignsPage api={api} /> : null}
         {page === "leads" ? <LeadsPage api={api} /> : null}
-        {page === "replies" ? <RepliesPage api={api} /> : null}
         {page === "settings" ? (
           <SettingsPage
             api={api}

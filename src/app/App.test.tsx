@@ -11,16 +11,17 @@ describe("TinyMails app shell", () => {
     const fakeApi: AppApi = {
       getCampaigns: async () => [],
       getLeads: async () => ({ leads: [], counts: { total: 0 }, sources: [] }),
-      getReplies: async () => [],
       startGoogleOAuth: async () => ({ sessionId: "session", authorizationUrl: "https://example.com" }),
       getGoogleOAuthStatus: async () => ({ status: "pending" }),
       sendTestEmail: async () => ({ ok: true, messageId: "message" }),
+      disconnectGoogleAccount: async () => undefined,
       updateAccount: async () => { throw new Error("Not used"); },
       importLeads: async () => ({ leads: [], added: 0, existing: 0, enriched: 0, duplicate: 0, invalid: 0 }),
       createCampaign: async () => { throw new Error("Not used"); },
       testCampaign: async () => { throw new Error("Not used"); },
       startCampaign: async () => { throw new Error("Not used"); },
       pauseCampaign: async () => { throw new Error("Not used"); },
+      stopCampaign: async () => { throw new Error("Not used"); },
       suppressEmails: async () => [],
       getTemplates: async () => [],
       saveTemplate: async () => { throw new Error("Not used"); },
@@ -36,6 +37,7 @@ describe("TinyMails app shell", () => {
     expect(screen.getByRole("heading", { name: "Campaigns" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Leads" }));
     expect(screen.getByRole("heading", { name: "Leads" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Replies" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
   });
@@ -44,16 +46,17 @@ describe("TinyMails app shell", () => {
     const fakeApi: AppApi = {
       getCampaigns: async () => [],
       getLeads: async () => ({ leads: [], counts: { total: 0 }, sources: [] }),
-      getReplies: async () => [],
       startGoogleOAuth: async () => ({ sessionId: "session", authorizationUrl: "https://example.com" }),
       getGoogleOAuthStatus: async () => ({ status: "pending" }),
       sendTestEmail: async () => ({ ok: true, messageId: "message" }),
+      disconnectGoogleAccount: async () => undefined,
       updateAccount: async () => { throw new Error("Not used"); },
       importLeads: async () => ({ leads: [], added: 0, existing: 0, enriched: 0, duplicate: 0, invalid: 0 }),
       createCampaign: async () => { throw new Error("Not used"); },
       testCampaign: async () => { throw new Error("Not used"); },
       startCampaign: async () => { throw new Error("Not used"); },
       pauseCampaign: async () => { throw new Error("Not used"); },
+      stopCampaign: async () => { throw new Error("Not used"); },
       suppressEmails: async () => [],
       getTemplates: async () => [],
       saveTemplate: async () => { throw new Error("Not used"); },
