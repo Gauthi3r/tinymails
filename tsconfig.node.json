@@ -9,5 +9,5 @@
     "strict": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["vite.config.ts", "scripts", "tests"]
+  "include": ["vite.config.ts"]
 }
