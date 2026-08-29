@@ -113,5 +113,6 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
     createCampaign: vi.fn(async () => ({ campaign, excluded: [] })),
     startCampaign: vi.fn(async () => ({ ...campaign, status: "running" as const })),
     pauseCampaign: vi.fn(async () => campaign),
+    suppressEmails: vi.fn(),
   } as unknown as AppApi & { createCampaign: ReturnType<typeof vi.fn> };
 }

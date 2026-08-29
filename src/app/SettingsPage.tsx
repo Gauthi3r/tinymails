@@ -1,4 +1,4 @@
-import { Database, ExternalLink, KeyRound, Mail, Send, ShieldCheck, Upload } from "lucide-react";
+import { Database, Download, ExternalLink, KeyRound, Mail, Send, ShieldCheck, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
@@ -200,6 +200,20 @@ export function SettingsPage({
           className="min-h-12"
         />
         <SquircleCardRow label="TinyMails version" value={settings?.version ?? "Loading"} />
+        <SquircleCardRow
+          label={
+            <span className="flex flex-col py-2">
+              <span>Portable backup</span>
+              <span className="text-xs text-muted-foreground">Contacts and history; Google credentials excluded</span>
+            </span>
+          }
+          value={
+            <a href="/api/backup" download className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <Download className="size-3.5" aria-hidden="true" /> Download
+            </a>
+          }
+          className="min-h-14"
+        />
       </SquircleCard>
     </PageFrame>
   );

@@ -77,6 +77,7 @@ function connectionApi(account: PublicAccount) {
     createCampaign: vi.fn(),
     startCampaign: vi.fn(),
     pauseCampaign: vi.fn(),
+    suppressEmails: vi.fn(),
   } satisfies AppApi;
 }
 

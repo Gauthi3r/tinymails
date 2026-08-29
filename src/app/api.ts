@@ -35,6 +35,7 @@ export interface AppApi {
   createCampaign(input: Omit<CreateCampaignInput, "now">): Promise<CreateCampaignResult>;
   startCampaign(campaignId: string): Promise<Campaign>;
   pauseCampaign(campaignId: string): Promise<Campaign>;
+  suppressEmails(emails: string[]): Promise<string[]>;
 }
 
 export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
@@ -71,6 +72,9 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async pauseCampaign(campaignId) {
       return (await sendJson<{ campaign: Campaign }>(fetcher, `/api/campaigns/${encodeURIComponent(campaignId)}/pause`, {})).campaign;
+    },
+    async suppressEmails(emails) {
+      return (await sendJson<{ emails: string[] }>(fetcher, "/api/suppression", { emails })).emails;
     },
   };
 }

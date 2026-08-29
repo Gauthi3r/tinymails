@@ -30,6 +30,21 @@ describe("lead CSV import", () => {
     ]);
     expect(await screen.findByText("2 leads added.")).toBeVisible();
   });
+
+  it("adds a visible lead to do-not-contact", async () => {
+    const api = fakeApi();
+    api.getLeads.mockResolvedValue({
+      leads: [{ email: "ada@example.com", firstName: "Ada", source: "Beta", addedAt: "2026-08-29T10:00:00.000Z", status: "new" }],
+      counts: { total: 1, new: 1 },
+      sources: ["Beta"],
+    });
+    render(<LeadsPage api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Do not contact ada@example.com" }));
+
+    expect(api.suppressEmails).toHaveBeenCalledWith(["ada@example.com"]);
+    expect(await screen.findByText("ada@example.com added to do-not-contact.")).toBeVisible();
+  });
 });
 
 function fakeApi() {
@@ -54,5 +69,6 @@ function fakeApi() {
       duplicate: 0,
       invalid: 0,
     })),
+    suppressEmails: vi.fn(async () => ["ada@example.com"]),
   } as unknown as AppApi & { importLeads: ReturnType<typeof vi.fn> };
 }

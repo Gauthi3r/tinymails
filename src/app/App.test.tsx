@@ -19,6 +19,7 @@ describe("TinyMails app shell", () => {
       createCampaign: async () => { throw new Error("Not used"); },
       startCampaign: async () => { throw new Error("Not used"); },
       pauseCampaign: async () => { throw new Error("Not used"); },
+      suppressEmails: async () => [],
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",
@@ -47,6 +48,7 @@ describe("TinyMails app shell", () => {
       createCampaign: async () => { throw new Error("Not used"); },
       startCampaign: async () => { throw new Error("Not used"); },
       pauseCampaign: async () => { throw new Error("Not used"); },
+      suppressEmails: async () => [],
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",

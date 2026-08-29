@@ -125,6 +125,28 @@ describe("local API", () => {
 
     expect(response.body).toEqual({ error: "Leads must be an array." });
   });
+
+  it("exports a portable backup without credential paths", async () => {
+    await repositories.leads.update((leads) => [
+      ...leads,
+      { email: "ada@example.com", firstName: "Ada", source: "Beta", addedAt: now.toISOString() },
+    ]);
+
+    const response = await request(app).get("/api/backup").expect(200);
+
+    expect(response.headers["content-disposition"]).toContain("tinymails-backup-2026-08-29.json");
+    expect(response.body).toMatchObject({
+      product: "TinyMails",
+      version: "0.1.0",
+      data: {
+        accounts: [expect.objectContaining({ email: "sender@example.com" })],
+        leads: [expect.objectContaining({ email: "ada@example.com" })],
+        suppression: [],
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain("credentialDirectory");
+    expect(JSON.stringify(response.body)).not.toContain("/tmp/credentials");
+  });
 });
 
 function accountFixture(): Account {

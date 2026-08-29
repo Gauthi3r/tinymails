@@ -1,4 +1,4 @@
-import { Search, Upload, UsersRound } from "lucide-react";
+import { Search, ShieldOff, Upload, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
@@ -13,6 +13,8 @@ export function LeadsPage({ api }: { api: AppApi }) {
   const [source, setSource] = useState("");
   const [error, setError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [suppressing, setSuppressing] = useState<string | null>(null);
 
   async function refresh() {
     setData(await api.getLeads());
@@ -40,6 +42,24 @@ export function LeadsPage({ api }: { api: AppApi }) {
     );
   }, [data, query, source]);
 
+  async function suppress(email: string) {
+    setSuppressing(email);
+    setStatusMessage(null);
+    try {
+      await api.suppressEmails([email]);
+      setData((current) => current ? {
+        ...current,
+        leads: current.leads.map((lead) => lead.email === email ? { ...lead, status: "do-not-contact" } : lead),
+        counts: countStatuses(current.leads.map((lead) => lead.email === email ? { ...lead, status: "do-not-contact" as const } : lead)),
+      } : current);
+      setStatusMessage(`${email} added to do-not-contact.`);
+    } catch (suppressError) {
+      setStatusMessage(suppressError instanceof Error ? suppressError.message : "The address could not be suppressed.");
+    } finally {
+      setSuppressing(null);
+    }
+  }
+
   return (
     <PageFrame
       eyebrow="Contact library"
@@ -47,6 +67,7 @@ export function LeadsPage({ api }: { api: AppApi }) {
       description="Status is derived from real campaign history and the do-not-contact list."
     >
       {error ? <NoticeStrip claim="Leads are unavailable.">Check that the local service is running.</NoticeStrip> : null}
+      {statusMessage ? <NoticeStrip claim="Lead updated">{statusMessage}</NoticeStrip> : null}
       {importOpen ? <CsvImportPanel api={api} onClose={() => setImportOpen(false)} onImported={refresh} /> : null}
       <div className="flex flex-col gap-3 sm:flex-row">
         <label className="relative flex-1">
@@ -96,6 +117,7 @@ export function LeadsPage({ api }: { api: AppApi }) {
                   <th className="px-4 py-3">Company</th>
                   <th className="px-4 py-3">Source</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -108,6 +130,19 @@ export function LeadsPage({ api }: { api: AppApi }) {
                     <td className="px-4 py-3 text-muted-foreground">{lead.company || "Not set"}</td>
                     <td className="px-4 py-3 text-muted-foreground">{lead.source}</td>
                     <td className="px-5 py-3 capitalize">{lead.status.replaceAll("-", " ")}</td>
+                    <td className="px-5 py-3 text-right">
+                      {lead.status !== "do-not-contact" ? (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          loading={suppressing === lead.email}
+                          onClick={() => void suppress(lead.email)}
+                          aria-label={`Do not contact ${lead.email}`}
+                        >
+                          <ShieldOff className="size-3.5" aria-hidden="true" /> Suppress
+                        </Button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -117,4 +152,10 @@ export function LeadsPage({ api }: { api: AppApi }) {
       </SquircleSurface>
     </PageFrame>
   );
+}
+
+function countStatuses(leads: LeadsResponse["leads"]): Record<string, number> {
+  const counts: Record<string, number> = { total: leads.length };
+  for (const lead of leads) counts[lead.status] = (counts[lead.status] ?? 0) + 1;
+  return counts;
 }

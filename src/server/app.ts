@@ -257,6 +257,34 @@ export function createApp(dependencies: AppDependencies) {
     });
   }));
 
+  app.get("/api/backup", asyncRoute(async (_request, response) => {
+    const [accounts, campaigns, leads, templates, replies, suppression] = await Promise.all([
+      dependencies.repositories.accounts.list(),
+      dependencies.repositories.campaigns.list(),
+      dependencies.repositories.leads.list(),
+      dependencies.repositories.templates.list(),
+      dependencies.repositories.replies.list(),
+      dependencies.repositories.suppression.list(),
+    ]);
+    const exportedAt = clock().toISOString();
+    response
+      .set("Content-Disposition", `attachment; filename="tinymails-backup-${exportedAt.slice(0, 10)}.json"`)
+      .json({
+        product: "TinyMails",
+        version: "0.1.0",
+        exportedAt,
+        credentialsIncluded: false,
+        data: {
+          accounts: accounts.map(publicAccount),
+          campaigns,
+          leads,
+          templates,
+          replies,
+          suppression,
+        },
+      });
+  }));
+
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     if (error instanceof PublicError) {
       response.status(400).json({ error: error.message });
