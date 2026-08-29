@@ -32,11 +32,10 @@ On Linux, the native credential vault needs a Secret Service-compatible keyring 
 git clone <your-repository-url>
 cd tinymails
 npm install
-npm run build
-npm run serve
+npm start
 ```
 
-Open `http://127.0.0.1:3210`.
+`npm start` builds the app, starts it only on `127.0.0.1`, and opens `http://127.0.0.1:3210`. Set `TINYMAILS_NO_OPEN=1` if you do not want it to open a browser.
 
 ## Connect Gmail
 
@@ -61,6 +60,14 @@ npm run dev
 ```
 
 Vite runs at `http://127.0.0.1:5173` and proxies `/api` requests to the local service.
+
+## Distribution
+
+The first release is source-first: publish this repository on GitHub, tag releases, and support clone → `npm install` → `npm start`. This keeps the local data model, operating-system credential vault, loopback OAuth callback, and background campaign runner intact without installer signing or a hosted control plane.
+
+Vercel is a good future home for a marketing site, but its Connect framework is not a replacement for a durable end-user Gmail OAuth grant inside this local app. Gmail MCP integrations are useful when an MCP client is the product surface; they do not give a standalone TinyMails installation its own durable Gmail identity. A managed TinyMails OAuth client and signed desktop installers are later distribution projects if the source release earns regular users.
+
+Do not expose port 3210 to a public interface or deploy this loopback server as a multi-user web app.
 
 ## Local data
 

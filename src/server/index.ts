@@ -13,7 +13,7 @@ const repositories = createRepositories(dataDir);
 const recovered = recoverInterruptedCampaigns(await repositories.campaigns.list());
 await repositories.campaigns.replaceAll(recovered);
 
-const port = Number(process.env.TINYMAILS_PORT ?? 3210);
+const port = serverPort(process.env.TINYMAILS_PORT);
 const vault = new KeyringCredentialVault();
 const gmail = new GoogleGmailAdapter({ dataDir, vault });
 const oauth = new GoogleOAuthService({
@@ -33,6 +33,18 @@ const app = createApp({
 const staticDir = resolve(process.cwd(), "dist");
 app.use(express.static(staticDir));
 
-app.listen(port, "127.0.0.1", () => {
+app.listen(port, "127.0.0.1", (error?: Error) => {
+  if (error) {
+    console.error(`TinyMails could not start because port ${port} is unavailable.`);
+    return;
+  }
   console.log(`TinyMails is running at http://127.0.0.1:${port}`);
 });
+
+function serverPort(value: string | undefined): number {
+  const candidate = value === undefined ? 3210 : Number(value);
+  if (!Number.isInteger(candidate) || candidate < 1 || candidate > 65_535) {
+    throw new Error("TINYMAILS_PORT must be a number between 1 and 65535.");
+  }
+  return candidate;
+}

@@ -9,6 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "start": "node scripts/launch.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "serve": "tsx src/server/index.ts",
