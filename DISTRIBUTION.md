@@ -5,7 +5,7 @@
 TinyMails is distributed as a free, open-source GitHub repository. The supported installation path is:
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/Gauthi3r/tinymails.git
 cd tinymails
 npm install
 npm start

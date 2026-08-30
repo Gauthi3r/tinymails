@@ -4,6 +4,14 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Local-first Gmail mail merge for thoughtful, permission-based outreach.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gauthi3r/tinymails.git"
+  },
+  "homepage": "https://github.com/Gauthi3r/tinymails#readme",
+  "bugs": {
+    "url": "https://github.com/Gauthi3r/tinymails/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"

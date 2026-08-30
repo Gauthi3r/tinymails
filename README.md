@@ -33,7 +33,7 @@ On Linux, the native credential vault needs a Secret Service-compatible keyring 
 ## Run it locally
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/Gauthi3r/tinymails.git
 cd tinymails
 npm install
 npm start
