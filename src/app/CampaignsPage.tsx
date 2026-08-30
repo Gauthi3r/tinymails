@@ -56,19 +56,6 @@ export function CampaignsPage({ api }: { api: AppApi }) {
     }
   }
 
-  async function testCampaign(campaign: Campaign) {
-    setActionId(campaign.id);
-    setError(null);
-    try {
-      const updated = await api.testCampaign(campaign.id);
-      setCampaigns((current) => (current ?? []).map((record) => record.id === updated.id ? updated : record));
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "The campaign preview could not be sent.");
-    } finally {
-      setActionId(null);
-    }
-  }
-
   async function stopCampaign(campaign: Campaign) {
     setActionId(campaign.id);
     setError(null);
@@ -175,24 +162,19 @@ export function CampaignsPage({ api }: { api: AppApi }) {
                         <Pause className="size-3.5" aria-hidden="true" /> Pause
                       </Button>
                     ) : campaign.status === "paused" && campaign.recipients.some((recipient) => recipient.status === "pending") ? (
-                      <>
-                        {campaign.testedAt ? (
-                          <Button size="xs" loading={actionId === campaign.id} onClick={() => void changeStatus(campaign, "start")} aria-label={`Start ${campaign.name}`}>
-                            <Play className="size-3.5" aria-hidden="true" /> Start
-                          </Button>
-                        ) : (
-                          <Button variant="secondary" size="xs" loading={actionId === campaign.id} onClick={() => void testCampaign(campaign)} aria-label={`Test ${campaign.name}`}>
-                            <Send className="size-3.5" aria-hidden="true" /> Send test
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="xs" loading={actionId === campaign.id} onClick={() => void stopCampaign(campaign)} aria-label={`Stop ${campaign.name}`}>
-                          <Ban className="size-3.5" aria-hidden="true" /> Stop
-                        </Button>
-                      </>
+                      <Button size="xs" loading={actionId === campaign.id} onClick={() => void changeStatus(campaign, "start")} aria-label={`Start ${campaign.name}`}>
+                        <Play className="size-3.5" aria-hidden="true" /> Start
+                      </Button>
                     ) : null}
                   </div>
                 </div>
-                {expanded ? <CampaignDetail campaign={campaign} /> : null}
+                {expanded ? (
+                  <CampaignDetail
+                    campaign={campaign}
+                    stopping={actionId === campaign.id}
+                    onStop={() => void stopCampaign(campaign)}
+                  />
+                ) : null}
               </div>
             );
           })}
@@ -236,7 +218,11 @@ function DraftRow({ draft, onResume, onDiscard }: {
   );
 }
 
-function CampaignDetail({ campaign }: { campaign: Campaign }) {
+function CampaignDetail({ campaign, stopping, onStop }: {
+  campaign: Campaign;
+  stopping: boolean;
+  onStop: () => void;
+}) {
   return (
     <div className="border-t border-border bg-card px-4 pb-4 pt-3">
       <div className="grid gap-3 rounded-xl border border-border bg-background p-4 text-xs sm:grid-cols-3">
@@ -258,6 +244,14 @@ function CampaignDetail({ campaign }: { campaign: Campaign }) {
           </tbody>
         </table>
       </div>
+      {campaign.status === "paused" && campaign.recipients.some((recipient) => recipient.status === "pending") ? (
+        <div className="mt-3 flex items-center justify-end gap-3">
+          <span className="text-xs text-muted-foreground">Stopping ends this campaign and marks waiting recipients as not sent.</span>
+          <Button variant="ghost" size="xs" loading={stopping} onClick={onStop} aria-label={`Stop ${campaign.name}`}>
+            <Ban className="size-3.5" aria-hidden="true" /> Stop campaign
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

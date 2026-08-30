@@ -205,7 +205,7 @@ describe("campaign composer", () => {
     expect(await screen.findByText("Beta note")).toBeVisible();
   });
 
-  it("starts, pauses, and opens recipient-level campaign detail", async () => {
+  it("starts and pauses from the row, and stops from the expanded detail", async () => {
     const campaign = campaignFixture();
     const api = fakeApi([campaign]);
     render(<CampaignsPage api={api} />);
@@ -213,9 +213,8 @@ describe("campaign composer", () => {
     await userEvent.click(await screen.findByRole("button", { name: "View Beta note" }));
     expect(screen.getByText("ada@example.com")).toBeVisible();
     expect(screen.getAllByText("pending").length).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole("button", { name: "Test Beta note" }));
-    expect(api.testCampaign).toHaveBeenCalledWith("campaign-1");
-    await userEvent.click(await screen.findByRole("button", { name: "Start Beta note" }));
+    expect(screen.queryByRole("button", { name: "Test Beta note" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Start Beta note" }));
     expect(api.startCampaign).toHaveBeenCalledWith("campaign-1");
     await userEvent.click(await screen.findByRole("button", { name: "Pause Beta note" }));
     expect(api.pauseCampaign).toHaveBeenCalledWith("campaign-1");
