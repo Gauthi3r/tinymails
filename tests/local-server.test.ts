@@ -1,5 +1,6 @@
 import express from "express";
 import type { Server } from "node:http";
+import { fileURLToPath } from "node:url";
 import { listenOnLoopback, resolveStaticDirectory } from "../src/server/local-server";
 import { describe, expect, it } from "vitest";
 
@@ -19,7 +20,7 @@ describe("local server startup", () => {
   it("resolves production assets from the project containing the server module", () => {
     const moduleUrl = new URL("../src/server/index.ts", import.meta.url).href;
 
-    expect(resolveStaticDirectory(moduleUrl)).toBe(new URL("../dist", import.meta.url).pathname);
+    expect(resolveStaticDirectory(moduleUrl)).toBe(fileURLToPath(new URL("../dist", import.meta.url)));
   });
 });
 

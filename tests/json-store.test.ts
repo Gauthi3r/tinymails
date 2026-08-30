@@ -1,15 +1,16 @@
 import { mkdtemp, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Campaign } from "../src/domain/types";
 import { resolveDataDir } from "../src/server/data-dir";
 import { JsonStore } from "../src/server/json-store";
+import { honorsPosixModes } from "./platform";
 
 describe("local data storage", () => {
   it("uses the explicit data directory", () => {
     expect(resolveDataDir({ TINYMAILS_DATA_DIR: "/tmp/tinymails-test" })).toBe(
-      "/tmp/tinymails-test",
+      resolve("/tmp/tinymails-test"),
     );
   });
 
@@ -31,7 +32,9 @@ describe("local data storage", () => {
 
     await store.write([]);
 
-    expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
+    if (honorsPosixModes) {
+      expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
+    }
   });
 
   it("returns a fresh default value when its file does not exist", async () => {

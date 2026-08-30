@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, posix, resolve, sep } from "node:path";
 import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
 import { normalizeEmail } from "../domain/email";
 import type { Account } from "../domain/types";
@@ -139,7 +139,7 @@ export class GoogleOAuthService {
       const account = await this.serializeAccountMutation(async () => {
         const existing = (await this.options.accounts.list()).find((item) => item.email === email);
         const accountId = existing?.id ?? this.createId();
-        const credentialDirectory = existing?.credentialDirectory ?? join("accounts", accountId);
+        const credentialDirectory = existing?.credentialDirectory ?? posix.join("accounts", accountId);
         const account: Account = existing
           ? reconnectAccount(existing)
           : {

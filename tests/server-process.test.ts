@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { deliversTerminationSignals } from "./platform";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const children = new Set<ChildProcess>();
@@ -27,7 +28,10 @@ describe("TinyMails server process", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("Another TinyMails process is already using this data directory");
     await stop(first);
-    await expect(access(join(dataDir, "instance.lock"))).rejects.toMatchObject({ code: "ENOENT" });
+    // Releasing the lock on shutdown requires the process to observe SIGTERM.
+    if (deliversTerminationSignals) {
+      await expect(access(join(dataDir, "instance.lock"))).rejects.toMatchObject({ code: "ENOENT" });
+    }
   }, 15_000);
 });
 

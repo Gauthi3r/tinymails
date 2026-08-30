@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { acquireDataDirectoryLock } from "../src/server/instance-lock";
+import { honorsPosixModes } from "./platform";
 
 describe("data-directory instance lock", () => {
   it("allows one owner and rejects a second process using the same data directory", async () => {
@@ -17,7 +18,9 @@ describe("data-directory instance lock", () => {
       pid: 101,
       startedAt: "2026-08-30T10:00:00.000Z",
     });
-    expect((await stat(join(dataDir, "instance.lock"))).mode & 0o777).toBe(0o600);
+    if (honorsPosixModes) {
+      expect((await stat(join(dataDir, "instance.lock"))).mode & 0o777).toBe(0o600);
+    }
 
     await first.release();
     const second = await acquireDataDirectoryLock(dataDir, { pid: 202, startedAt: "2026-08-30T10:01:00.000Z" });
