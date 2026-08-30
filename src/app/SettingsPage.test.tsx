@@ -23,6 +23,7 @@ describe("Gmail setup", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Connect Gmail" })).toBeVisible();
+    expect(screen.queryByText(/requests your verified email/)).not.toBeInTheDocument();
     const file = new File(
       [JSON.stringify({ installed: { client_id: "123456789.apps.googleusercontent.com" } })],
       "oauth-client.json",
@@ -58,6 +59,37 @@ describe("Gmail setup", () => {
 
     expect(await screen.findByText("That OAuth client file is unexpectedly large.")).toBeVisible();
     expect(api.startGoogleOAuth).not.toHaveBeenCalled();
+  });
+
+  it("offers a direct Google link when Chrome blocks the automatic window", async () => {
+    const account = accountFixture();
+    const api = connectionApi(account);
+    vi.spyOn(window, "open").mockReturnValue(null);
+    render(
+      <SettingsPage
+        api={api}
+        settings={settingsFixture([])}
+        error={false}
+        onSettingsChange={() => undefined}
+      />,
+    );
+    const file = new File(
+      [JSON.stringify({ installed: { client_id: "123456789.apps.googleusercontent.com" } })],
+      "oauth-client.json",
+      { type: "application/json" },
+    );
+
+    await userEvent.upload(screen.getByLabelText("Google OAuth client JSON"), file);
+
+    const continueLink = await screen.findByRole("link", { name: "Continue with Google" });
+    expect(continueLink).toHaveAttribute("href", "https://accounts.google.test/authorize");
+    expect(screen.queryByText(/browser blocked/)).not.toBeInTheDocument();
+    expect(api.getGoogleOAuthStatus).not.toHaveBeenCalled();
+
+    await userEvent.click(continueLink);
+
+    expect(await screen.findByText("sender@example.com is connected.")).toBeVisible();
+    expect(api.getGoogleOAuthStatus).toHaveBeenCalledWith("session-1");
   });
 
   it("edits the Gmail account sending window and limits", async () => {
@@ -110,7 +142,12 @@ describe("Gmail setup", () => {
 function connectionApi(account: PublicAccount) {
   return {
     getCampaigns: vi.fn(async () => []),
-    getLeads: vi.fn(async () => ({ leads: [], counts: { total: 0 }, sources: [] })),
+    getLeads: vi.fn(async () => ({
+      leads: [],
+      counts: { total: 0 },
+      lists: [],
+      pagination: { page: 1, pageSize: 50, total: 0, pages: 1 },
+    })),
     getSettings: vi.fn(async () => settingsFixture([account])),
     startGoogleOAuth: vi.fn(async () => ({
       sessionId: "session-1",
@@ -121,6 +158,7 @@ function connectionApi(account: PublicAccount) {
     disconnectGoogleAccount: vi.fn(async () => undefined),
     updateAccount: vi.fn(async (_accountId, input) => ({ ...account, ...input })),
     importLeads: vi.fn(),
+    bulkUpdateLeads: vi.fn(),
     createCampaign: vi.fn(),
     testCampaign: vi.fn(),
     startCampaign: vi.fn(),

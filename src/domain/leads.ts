@@ -13,12 +13,13 @@ export interface MergeLeadsResult {
 export function mergeLeads(
   existing: Lead[],
   incoming: ContactInput[],
-  source: string,
+  listId: string,
   now: string,
 ): MergeLeadsResult {
   const leads = existing.map((lead) => ({
     ...lead,
     email: normalizeEmail(lead.email) ?? lead.email,
+    listIds: [...new Set(lead.listIds)],
   }));
   const byEmail = new Map(leads.map((lead) => [lead.email, lead]));
   const incomingSeen = new Set<string>();
@@ -46,6 +47,7 @@ export function mergeLeads(
     const known = byEmail.get(email);
     if (known) {
       result.existing += 1;
+      if (!known.listIds.includes(listId)) known.listIds.push(listId);
       let enriched = false;
       if (!known.firstName && contact.firstName?.trim()) {
         known.firstName = contact.firstName.trim();
@@ -61,7 +63,7 @@ export function mergeLeads(
 
     const lead: Lead = {
       email,
-      source,
+      listIds: [listId],
       addedAt: now,
       ...(contact.firstName?.trim() ? { firstName: contact.firstName.trim() } : {}),
       ...(contact.company?.trim() ? { company: contact.company.trim() } : {}),
@@ -80,34 +82,48 @@ export function deriveLeadStatus(
   suppressed: Set<string>,
 ): LeadStatus {
   const email = normalizeEmail(lead.email) ?? lead.email;
-  const recipients = campaigns.flatMap((campaign) =>
-    campaign.recipients
-      .filter((recipient) => recipient.email === email)
-      .map((recipient) => ({ campaign, recipient })),
-  );
+  return indexLeadStatuses(campaigns, suppressed).get(email) ?? "new";
+}
 
-  if (suppressed.has(email)) return "do-not-contact";
-  if (recipients.some(({ recipient }) => recipient.status === "sent")) return "contacted";
-  if (
-    recipients.some(
-      ({ campaign, recipient }) =>
-        (campaign.status === "running" || campaign.status === "paused") &&
-        (recipient.status === "pending" || recipient.status === "sending"),
-    )
-  ) {
-    return "queued";
+export function indexLeadStatuses(
+  campaigns: Campaign[],
+  suppressed: Set<string>,
+): Map<string, LeadStatus> {
+  const statuses = new Map<string, LeadStatus>();
+  for (const address of suppressed) {
+    const email = normalizeEmail(address);
+    if (email) statuses.set(email, "do-not-contact");
   }
-  return "new";
+  for (const campaign of campaigns) {
+    const active = campaign.status === "running" || campaign.status === "paused";
+    for (const recipient of campaign.recipients) {
+      const email = normalizeEmail(recipient.email) ?? recipient.email;
+      const current = statuses.get(email);
+      if (current === "do-not-contact") continue;
+      if (recipient.status === "sent") {
+        statuses.set(email, "contacted");
+      } else if (
+        current !== "contacted"
+        && active
+        && (recipient.status === "pending" || recipient.status === "sending")
+      ) {
+        statuses.set(email, "queued");
+      }
+    }
+  }
+  return statuses;
 }
 
 export function availableLeads(
   leads: Lead[],
   campaigns: Campaign[],
   suppressed: Set<string>,
-  source?: string,
+  listId?: string,
 ): Lead[] {
+  const statuses = indexLeadStatuses(campaigns, suppressed);
   return leads.filter(
     (lead) =>
-      (!source || lead.source === source) && deriveLeadStatus(lead, campaigns, suppressed) === "new",
+      (!listId || lead.listIds.includes(listId))
+      && (statuses.get(normalizeEmail(lead.email) ?? lead.email) ?? "new") === "new",
   );
 }

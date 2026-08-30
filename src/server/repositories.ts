@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { normalizeEmail } from "../domain/email";
-import type { Account, Campaign, Lead, Template } from "../domain/types";
+import type { Account, Campaign, ContactList, Lead, Template } from "../domain/types";
 import { JsonStore } from "./json-store";
 
 interface Identified {
@@ -48,6 +48,21 @@ export class CollectionRepository<T extends Identified> {
     });
   }
 
+  async findOrCreate(
+    find: (record: T) => boolean,
+    create: () => T,
+  ): Promise<T> {
+    return this.queue.run(async () => {
+      const records = await this.store.read();
+      const existing = records.find(find);
+      if (existing) return structuredClone(existing);
+      const record = create();
+      records.push(record);
+      await this.store.write(records);
+      return structuredClone(record);
+    });
+  }
+
   async update(id: string, update: (record: T) => T): Promise<T | null> {
     return this.queue.run(async () => {
       const records = await this.store.read();
@@ -74,10 +89,14 @@ export class CollectionRepository<T extends Identified> {
 export class LeadRepository {
   private readonly queue = new SerialQueue();
 
-  constructor(private readonly store: JsonStore<Lead[]>) {}
+  constructor(
+    private readonly store: JsonStore<StoredLead[]>,
+    private readonly lists: CollectionRepository<ContactList>,
+    private readonly clock: () => Date,
+  ) {}
 
   list(): Promise<Lead[]> {
-    return this.store.read();
+    return this.queue.run(async () => structuredClone(await this.readAndMigrate()));
   }
 
   saveAll(leads: Lead[]): Promise<void> {
@@ -86,11 +105,64 @@ export class LeadRepository {
 
   update(update: (leads: Lead[]) => Lead[]): Promise<Lead[]> {
     return this.queue.run(async () => {
-      const leads = update(await this.store.read());
+      const leads = update(await this.readAndMigrate());
       await this.store.write(leads);
       return structuredClone(leads);
     });
   }
+
+  private async readAndMigrate(): Promise<Lead[]> {
+    const stored = await this.store.read();
+    const needsMigration = stored.some((lead) => !Array.isArray(lead.listIds) || "source" in lead);
+    if (!needsMigration) return stored as Lead[];
+
+    const lists = await this.lists.list();
+    const listsByName = new Map(lists.map((list) => [normalizedListName(list.name), list]));
+    const now = this.clock().toISOString();
+    const migrated: Lead[] = [];
+
+    for (const storedLead of stored) {
+      let listIds = Array.isArray(storedLead.listIds)
+        ? storedLead.listIds.filter((id): id is string => typeof id === "string")
+        : [];
+      if (listIds.length === 0) {
+        const name = typeof storedLead.source === "string" && storedLead.source.trim()
+          ? storedLead.source.trim()
+          : "Imported contacts";
+        const key = normalizedListName(name);
+        let list = listsByName.get(key);
+        if (!list) {
+          list = { id: randomUUID(), name, createdAt: now, updatedAt: now };
+          await this.lists.save(list);
+          listsByName.set(key, list);
+        }
+        listIds = [list.id];
+      }
+      migrated.push({
+        email: storedLead.email,
+        listIds: [...new Set(listIds)],
+        addedAt: storedLead.addedAt,
+        ...(storedLead.firstName ? { firstName: storedLead.firstName } : {}),
+        ...(storedLead.company ? { company: storedLead.company } : {}),
+      });
+    }
+
+    await this.store.write(migrated);
+    return migrated;
+  }
+}
+
+interface StoredLead {
+  email: string;
+  firstName?: string;
+  company?: string;
+  source?: string;
+  listIds?: string[];
+  addedAt: string;
+}
+
+function normalizedListName(name: string): string {
+  return name.trim().toLocaleLowerCase();
 }
 
 export class SuppressionListRepository {
@@ -157,15 +229,23 @@ export interface Repositories {
   accounts: CollectionRepository<Account>;
   campaigns: CollectionRepository<Campaign>;
   leads: LeadRepository;
+  lists: CollectionRepository<ContactList>;
   templates: CollectionRepository<Template>;
   suppression: SuppressionListRepository;
 }
 
-export function createRepositories(dataDir: string): Repositories {
+export function createRepositories(
+  dataDir: string,
+  clock: () => Date = () => new Date(),
+): Repositories {
+  const lists = new CollectionRepository(
+    new JsonStore<ContactList[]>(join(dataDir, "lists.json"), []),
+  );
   return {
     accounts: new CollectionRepository(new JsonStore(join(dataDir, "accounts.json"), [])),
     campaigns: new CollectionRepository(new JsonStore(join(dataDir, "campaigns.json"), [])),
-    leads: new LeadRepository(new JsonStore(join(dataDir, "leads.json"), [])),
+    leads: new LeadRepository(new JsonStore(join(dataDir, "leads.json"), []), lists, clock),
+    lists,
     templates: new CollectionRepository(new JsonStore(join(dataDir, "templates.json"), [])),
     suppression: new SuppressionListRepository(join(dataDir, "suppression.txt")),
   };

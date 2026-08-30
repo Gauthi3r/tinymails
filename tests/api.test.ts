@@ -64,18 +64,197 @@ describe("local API", () => {
     expect(await repositories.suppression.list()).toEqual(["blocked@example.com"]);
   });
 
+  it("reports one injected release version across every metadata endpoint", async () => {
+    const versionedApp = createApp({
+      repositories,
+      gmail,
+      dataDir: "/tmp/tinymails-version-test",
+      version: "9.8.7-test",
+      clock: () => now,
+    });
+
+    const health = await request(versionedApp).get("/api/health").expect(200);
+    const settings = await request(versionedApp).get("/api/settings").expect(200);
+    const backup = await request(versionedApp).get("/api/backup").expect(200);
+
+    expect(health.body.version).toBe("9.8.7-test");
+    expect(settings.body.version).toBe("9.8.7-test");
+    expect(backup.body.version).toBe("9.8.7-test");
+  });
+
   it("imports leads and returns derived status", async () => {
-    await request(app)
+    const imported = await request(app)
       .post("/api/leads/import")
-      .send({ source: "Product beta", leads: [{ email: "ada@example.com", firstName: "Ada" }] })
+      .send({ target: { listName: "Product beta" }, leads: [{ email: "ada@example.com", firstName: "Ada" }] })
       .expect(200);
 
     const response = await request(app).get("/api/leads").expect(200);
 
+    expect(imported.body.list).toMatchObject({ name: "Product beta" });
     expect(response.body.leads).toEqual([
-      expect.objectContaining({ email: "ada@example.com", status: "new" }),
+      expect.objectContaining({
+        email: "ada@example.com",
+        listIds: [imported.body.list.id],
+        status: "new",
+      }),
     ]);
     expect(response.body.counts).toMatchObject({ total: 1, new: 1 });
+    expect(response.body.pagination).toEqual({ page: 1, pageSize: 50, total: 1, pages: 1 });
+  });
+
+  it("reuses list names without regard to case and adds membership to known contacts", async () => {
+    const first = await request(app)
+      .post("/api/leads/import")
+      .send({ target: { listName: "Product beta" }, leads: [{ email: "ada@example.com" }] })
+      .expect(200);
+    const second = await request(app)
+      .post("/api/leads/import")
+      .send({ target: { listName: "product BETA" }, leads: [{ email: "grace@example.com" }] })
+      .expect(200);
+    const third = await request(app)
+      .post("/api/leads/import")
+      .send({ target: { listName: "Founders" }, leads: [{ email: "ADA@example.com" }] })
+      .expect(200);
+
+    expect(second.body.list.id).toBe(first.body.list.id);
+    const lists = await request(app).get("/api/lists").expect(200);
+    expect(lists.body.lists).toEqual([
+      expect.objectContaining({ id: third.body.list.id, name: "Founders", contactCount: 1 }),
+      expect.objectContaining({ id: first.body.list.id, name: "Product beta", contactCount: 2 }),
+    ]);
+    expect((await repositories.leads.list()).find((lead) => lead.email === "ada@example.com")?.listIds)
+      .toEqual([first.body.list.id, third.body.list.id]);
+  });
+
+  it("paginates and filters leads on the local server", async () => {
+    const list = {
+      id: "list-beta",
+      name: "Beta",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    await repositories.lists.save(list);
+    await repositories.leads.saveAll(Array.from({ length: 125 }, (_, index) => ({
+      email: `person-${String(index).padStart(3, "0")}@example.com`,
+      firstName: index === 124 ? "Ada" : `Person ${index}`,
+      listIds: [list.id],
+      addedAt: new Date(now.getTime() + index * 1_000).toISOString(),
+    })));
+    await repositories.suppression.add(["person-000@example.com"]);
+
+    const page = await request(app)
+      .get("/api/leads?page=2&pageSize=50&listId=list-beta&status=new")
+      .expect(200);
+    expect(page.body.pagination).toEqual({ page: 2, pageSize: 50, total: 124, pages: 3 });
+    expect(page.body.leads).toHaveLength(50);
+    expect(page.body.leads.every((lead: { status: string }) => lead.status === "new")).toBe(true);
+
+    const lastPage = await request(app)
+      .get("/api/leads?page=99&pageSize=500&query=Ada")
+      .expect(200);
+    expect(lastPage.body.pagination).toEqual({ page: 1, pageSize: 100, total: 1, pages: 1 });
+    expect(lastPage.body.leads).toEqual([
+      expect.objectContaining({ email: "person-124@example.com", firstName: "Ada" }),
+    ]);
+  });
+
+  it("adds and removes selected contacts from lists in bulk", async () => {
+    const beta = await request(app)
+      .post("/api/leads/import")
+      .send({
+        target: { listName: "Beta" },
+        leads: [{ email: "ada@example.com" }, { email: "grace@example.com" }],
+      })
+      .expect(200);
+    const founders = await request(app)
+      .post("/api/leads/import")
+      .send({ target: { listName: "Founders" }, leads: [{ email: "linus@example.com" }] })
+      .expect(200);
+
+    const added = await request(app)
+      .post("/api/leads/bulk")
+      .send({
+        selection: { mode: "emails", emails: ["ADA@example.com"] },
+        operation: { type: "add-to-list", listId: founders.body.list.id },
+      })
+      .expect(200);
+    expect(added.body).toMatchObject({ affected: 1, skipped: 0 });
+
+    const removed = await request(app)
+      .post("/api/leads/bulk")
+      .send({
+        selection: {
+          mode: "filter",
+          listId: beta.body.list.id,
+          excludedEmails: ["grace@example.com"],
+        },
+        operation: { type: "remove-from-list", listId: beta.body.list.id },
+      })
+      .expect(200);
+    expect(removed.body).toMatchObject({ affected: 1, skipped: 0 });
+
+    const leads = await repositories.leads.list();
+    expect(leads.find((lead) => lead.email === "ada@example.com")?.listIds)
+      .toEqual([founders.body.list.id]);
+    expect(leads.find((lead) => lead.email === "grace@example.com")?.listIds)
+      .toEqual([beta.body.list.id]);
+  });
+
+  it("deletes contacts and unsent recipients while preserving delivery audit rows", async () => {
+    await repositories.lists.save({
+      id: "list-beta",
+      name: "Beta",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    const statuses = ["pending", "not-sent", "sent", "failed", "sending"] as const;
+    await repositories.leads.saveAll(statuses.map((status) => ({
+      email: `${status}@example.com`,
+      listIds: ["list-beta"],
+      addedAt: now.toISOString(),
+    })));
+    await repositories.campaigns.save({
+      id: "campaign-audit",
+      name: "Audit",
+      subject: "Hello",
+      body: "Hi",
+      accountIds: ["account-1"],
+      dailyCap: 25,
+      delayMinSeconds: 30,
+      delayMaxSeconds: 45,
+      createdAt: now.toISOString(),
+      status: "paused",
+      recipients: statuses.map((status) => ({
+        email: `${status}@example.com`,
+        accountId: "account-1",
+        status,
+      })),
+    });
+
+    const deleted = await request(app)
+      .post("/api/leads/bulk")
+      .send({
+        selection: { mode: "filter", listId: "list-beta" },
+        operation: { type: "delete" },
+      })
+      .expect(200);
+
+    expect(deleted.body).toEqual({
+      affected: 4,
+      skipped: 1,
+      skippedEmails: ["sending@example.com"],
+    });
+    expect((await repositories.leads.list()).map((lead) => lead.email)).toEqual([
+      "sending@example.com",
+    ]);
+    expect((await repositories.campaigns.get("campaign-audit"))?.recipients.map((recipient) => ({
+      email: recipient.email,
+      status: recipient.status,
+    }))).toEqual([
+      { email: "sent@example.com", status: "sent" },
+      { email: "failed@example.com", status: "failed" },
+      { email: "sending@example.com", status: "sending" },
+    ]);
   });
 
   it("creates a campaign without exposing blocked recipients", async () => {
@@ -346,6 +525,32 @@ describe("local API", () => {
       .expect(409, { error: "Pause this campaign before stopping it." });
   });
 
+  it("does not move stopped or completed campaigns back to paused", async () => {
+    const created = await request(app)
+      .post("/api/campaigns")
+      .send({
+        name: "Finished update",
+        subject: "A short update",
+        body: "Hi there",
+        accountIds: ["account-1"],
+        dailyCap: 25,
+        delayMinSeconds: 30,
+        delayMaxSeconds: 45,
+        recipients: [{ email: "ready@example.com" }],
+      })
+      .expect(201);
+
+    for (const status of ["stopped", "done"] as const) {
+      await repositories.campaigns.update(created.body.campaign.id, (campaign) => ({ ...campaign, status }));
+
+      await request(app)
+        .post(`/api/campaigns/${created.body.campaign.id}/pause`)
+        .send({})
+        .expect(409, { error: "Only a running campaign can be paused." });
+      expect((await repositories.campaigns.get(created.body.campaign.id))?.status).toBe(status);
+    }
+  });
+
   it("does not stop while an in-flight delivery is still settling", async () => {
     const created = await request(app)
       .post("/api/campaigns")
@@ -374,7 +579,7 @@ describe("local API", () => {
   it("returns a bounded validation error for malformed imports", async () => {
     const response = await request(app)
       .post("/api/leads/import")
-      .send({ source: "Product beta", leads: "not-a-list" })
+      .send({ target: { listName: "Product beta" }, leads: "not-a-list" })
       .expect(400);
 
     expect(response.body).toEqual({ error: "Leads must be an array." });
@@ -384,7 +589,7 @@ describe("local API", () => {
     await request(app)
       .post("/api/leads/import")
       .send({
-        source: "Large reviewed import",
+        target: { listName: "Large reviewed import" },
         leads: [{ email: "person@example.com" }],
         padding: "x".repeat(3_000_000),
       })
@@ -395,7 +600,7 @@ describe("local API", () => {
     await request(app)
       .post("/api/leads/import")
       .send({
-        source: "Too large",
+        target: { listName: "Too large" },
         leads: [{ email: "person@example.com" }],
         padding: "x".repeat(13_000_000),
       })
@@ -410,8 +615,14 @@ describe("local API", () => {
     } as Account);
     await repositories.leads.update((leads) => [
       ...leads,
-      { email: "ada@example.com", firstName: "Ada", source: "Beta", addedAt: now.toISOString() },
+      { email: "ada@example.com", firstName: "Ada", listIds: ["list-beta"], addedAt: now.toISOString() },
     ]);
+    await repositories.lists.save({
+      id: "list-beta",
+      name: "Beta",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
 
     const response = await request(app).get("/api/backup").expect(200);
 
@@ -422,6 +633,7 @@ describe("local API", () => {
       data: {
         accounts: [expect.objectContaining({ email: "sender@example.com" })],
         leads: [expect.objectContaining({ email: "ada@example.com" })],
+        lists: [expect.objectContaining({ id: "list-beta", name: "Beta" })],
         suppression: [],
       },
     });

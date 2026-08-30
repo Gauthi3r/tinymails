@@ -37,7 +37,7 @@ Version 0.1 does not include:
 - A TinyMails-managed Google OAuth client.
 - Vercel Connect or an MCP dependency.
 - Inbox access, reply tracking, or bounce detection.
-- Backup restore, selective contact deletion, or lead editing.
+- Backup restore, lead editing, or list renaming.
 
 ## Permission and abuse policy
 
@@ -61,7 +61,7 @@ TinyMails remains a single-user local web application.
 - Local server: Node.js and Express, bound only to `127.0.0.1`.
 - Gmail adapter: Google's supported Node.js auth library and Gmail REST API, with account-specific client metadata and credentials.
 - Secret storage: the operating-system credential vault through the native keyring adapter.
-- Persistence: small JSON and text files written atomically in the TinyMails application-data directory.
+- Persistence: small JSON and text files written atomically in the TinyMails application-data directory. An exclusive instance lock is acquired before recovery or repository access.
 - Browser communication: local JSON API. Running campaign status may continue with short polling in v0.1.
 
 The browser is not trusted merely because the server runs on loopback. Every request must use a literal `127.0.0.1` or `localhost` Host header. State-changing requests with an Origin header must match that loopback origin. These checks prevent a remote website from reaching the API through DNS rebinding. OAuth state remains a separate, single-use defense for the callback.
@@ -106,7 +106,8 @@ Runtime data contains:
 
 - `accounts.json`: labels, email addresses, capability flags, caps, sending hours, and credential-directory references.
 - `campaigns.json`: campaign settings and per-recipient audit history.
-- `leads.json`: imported lead identity and source list only.
+- `leads.json`: imported lead identity and membership in zero or more lists.
+- `lists.json`: list names and local identifiers.
 - `templates.json`: reusable subject and body copy.
 - `suppression.txt`: normalized addresses that must never be contacted.
 
@@ -118,18 +119,13 @@ Writes use a temporary file followed by an atomic rename. Backup exports one por
 
 TinyMails uses the OA product language: a quiet grey stage, white squircle plates, one blue accent, ink-derived neutrals, pill actions, restrained motion, and sentence-case copy.
 
-The app shell has:
-
-- A fixed 56-pixel header with the TinyMails wordmark.
-- Account and connection status at the right.
-- Primary navigation for Campaigns and Leads.
-- A Settings entry for Gmail accounts, sending rules, suppression, and data.
+The app shell uses one floating navigation pill. The TinyMails logo is its first item, followed by Campaigns, Leads, and Settings.
 
 ### New campaign
 
 Campaign composition is a dedicated page with four steps:
 
-1. Recipients: explicitly select available leads and review unavailable rows.
+1. Recipients: choose an existing list or upload a CSV, then explicitly select available leads.
 2. Write: enter subject and body, insert variables, or load a template.
 3. Delivery: choose Gmail accounts, a campaign cap, and delays. Account sending hours are edited in Settings.
 4. Review: inspect personalized samples, missing-value fallbacks, exclusions, duration estimate, and the final recipient count.
@@ -142,7 +138,7 @@ The Campaigns page shows active and recent campaigns in a compact list. Each row
 
 ### Leads
 
-The Leads page combines CSV import, search, source filtering, campaign-derived status, and one-address-at-a-time suppression. Editing, selective deletion, and export remain future work.
+The Leads page combines list-aware CSV import, search, list and status filtering, server-driven pagination, and campaign-derived status. Users can select the current page or every filtered contact, then add the selection to another list, remove it from the active list, or delete it. Delete removes contact records and unsent recipients while preserving completed delivery history.
 
 ### Settings
 

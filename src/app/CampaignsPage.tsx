@@ -1,14 +1,17 @@
-import { Ban, ChevronDown, ChevronUp, MailPlus, Pause, Play, Plus, Send } from "lucide-react";
+import { Ban, ChevronDown, ChevronUp, FilePenLine, MailPlus, Pause, Play, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../components/button";
+import { cn } from "../components/cn";
 import { NoticeStrip } from "../components/notice-strip";
 import { SquircleCard, SquircleSurface } from "../components/squircle-card";
 import type { Campaign } from "../domain/types";
 import type { AppApi } from "./api";
+import { clearCampaignDraft, loadCampaignDraft, type CampaignDraft } from "./campaign-draft";
 import { CampaignComposer } from "./CampaignComposer";
 
 export function CampaignsPage({ api }: { api: AppApi }) {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const [draft, setDraft] = useState<CampaignDraft | null>(() => loadCampaignDraft(window.localStorage));
   const [error, setError] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -81,28 +84,48 @@ export function CampaignsPage({ api }: { api: AppApi }) {
 
   return (
     <PageFrame
-      eyebrow="Outbox"
       title="Campaigns"
       description="Review every recipient, limit, and account before Gmail sends anything."
+      fillViewport={composing}
+      action={
+        !composing && !draft && campaigns && campaigns.length > 0 ? (
+          <Button onClick={() => setComposing(true)}>
+            <Plus className="size-4" aria-hidden="true" /> New campaign
+          </Button>
+        ) : undefined
+      }
     >
+      {error ? <NoticeStrip claim="Campaigns are unavailable.">{error}</NoticeStrip> : null}
       {composing ? (
         <CampaignComposer
           api={api}
+          initialDraft={draft}
           onCancel={() => setComposing(false)}
+          onDraftChange={setDraft}
           onCreated={(campaign) => {
             setCampaigns((current) => [campaign, ...(current ?? [])]);
+            setDraft(null);
             setComposing(false);
           }}
         />
-      ) : (
-        <div className="flex justify-end">
-          <Button onClick={() => setComposing(true)}><Plus className="size-4" aria-hidden="true" /> New campaign</Button>
-        </div>
-      )}
-      {error ? <NoticeStrip claim="Campaigns are unavailable.">{error}</NoticeStrip> : null}
+      ) : null}
       {!composing && campaigns === null ? <CampaignSkeleton /> : null}
-      {!composing && campaigns?.length === 0 ? (
-        <SquircleSurface className="items-center border border-border px-6 py-16 text-center shadow-[var(--shadow-resting)]">
+      {!composing && draft ? (
+        <DraftRow
+          draft={draft}
+          onResume={() => setComposing(true)}
+          onDiscard={() => {
+            clearCampaignDraft(window.localStorage);
+            setDraft(null);
+          }}
+        />
+      ) : null}
+      {!composing && campaigns?.length === 0 && !draft ? (
+        <SquircleSurface
+          role="region"
+          aria-label="Empty campaigns"
+          className="items-center border border-border px-6 py-16 text-center shadow-[var(--shadow-resting)]"
+        >
           <span className="mb-5 grid size-11 place-items-center rounded-2xl bg-secondary text-muted-foreground">
             <MailPlus className="size-5" aria-hidden="true" />
           </span>
@@ -110,6 +133,9 @@ export function CampaignsPage({ api }: { api: AppApi }) {
           <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
             Connect Gmail, import a permission-based list, then review the recipients and delivery rules here.
           </p>
+          <Button className="mt-6" onClick={() => setComposing(true)}>
+            <Plus className="size-4" aria-hidden="true" /> New campaign
+          </Button>
         </SquircleSurface>
       ) : null}
       {!composing && campaigns && campaigns.length > 0 ? (
@@ -175,6 +201,33 @@ export function CampaignsPage({ api }: { api: AppApi }) {
   );
 }
 
+function DraftRow({ draft, onResume, onDiscard }: {
+  draft: CampaignDraft;
+  onResume: () => void;
+  onDiscard: () => void;
+}) {
+  const name = draft.name.trim() || "Untitled campaign";
+  const step = ["Recipients", "Write", "Delivery", "Review"][draft.step];
+  return (
+    <SquircleSurface className="border border-border px-4 py-3 shadow-[var(--shadow-resting)] sm:flex-row sm:items-center sm:gap-4">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-secondary text-muted-foreground">
+        <FilePenLine className="size-4" aria-hidden="true" />
+      </span>
+      <span className="mt-3 min-w-0 flex-1 sm:mt-0">
+        <span className="block text-xs font-medium text-muted-foreground">Draft</span>
+        <span className="block truncate text-sm font-medium">{name}</span>
+        <span className="block text-xs text-muted-foreground">Step {draft.step + 1} of 4 · {step}</span>
+      </span>
+      <span className="mt-3 flex items-center gap-2 sm:mt-0">
+        <Button size="sm" onClick={onResume} aria-label={`Resume ${name}`}>Resume</Button>
+        <Button variant="ghost" size="sm" onClick={onDiscard} aria-label={`Discard ${name}`}>
+          <Trash2 className="size-4" aria-hidden="true" /> Discard
+        </Button>
+      </span>
+    </SquircleSurface>
+  );
+}
+
 function CampaignDetail({ campaign }: { campaign: Campaign }) {
   return (
     <div className="border-t border-border bg-card px-4 pb-4 pt-3">
@@ -205,21 +258,39 @@ export function PageFrame({
   eyebrow,
   title,
   description,
+  action,
+  fillViewport = false,
   children,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
+  action?: ReactNode;
+  fillViewport?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="oa-arrive mx-auto w-full max-w-5xl px-4 pb-16 pt-10 sm:px-6 sm:pt-14 lg:px-8">
-      <header className="mb-8">
-        <p className="mb-2 text-xs font-medium text-muted-foreground">{eyebrow}</p>
-        <h1 className="text-3xl font-semibold tracking-[-0.035em] text-foreground">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+    <section
+      className={cn(
+        "oa-arrive mx-auto w-full max-w-5xl px-4 pt-3 sm:px-6 sm:pt-4 lg:px-8",
+        fillViewport ? "flex h-[calc(100dvh-5.25rem)] flex-col overflow-hidden pb-4" : "pb-16",
+      )}
+    >
+      <header
+        className={cn(
+          "shrink-0",
+          action ? "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" : undefined,
+          fillViewport ? "mb-4 sm:mb-6" : "mb-8",
+        )}
+      >
+        <div className="min-w-0">
+          {eyebrow ? <p className="mb-2 text-xs font-medium text-muted-foreground">{eyebrow}</p> : null}
+          <h1 className="text-3xl font-semibold tracking-[-0.035em] text-foreground">{title}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+        </div>
+        {action ? <div className="shrink-0 self-start sm:self-auto">{action}</div> : null}
       </header>
-      <div className="space-y-4">{children}</div>
+      <div className={cn("flex min-h-0 flex-col gap-4", fillViewport && "flex-1")}>{children}</div>
     </section>
   );
 }

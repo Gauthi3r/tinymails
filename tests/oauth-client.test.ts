@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MemoryCredentialVault } from "../src/gmail/credential-vault";
+import {
+  KeyringCredentialVault,
+  MemoryCredentialVault,
+  persistentGoogleTokens,
+} from "../src/gmail/credential-vault";
 import { OAuthClientValidationError, parseDesktopOAuthClient } from "../src/gmail/oauth-client";
 
 describe("Google Desktop OAuth client validation", () => {
@@ -39,6 +43,59 @@ describe("Google Desktop OAuth client validation", () => {
 });
 
 describe("credential vault", () => {
+  it("projects only the refresh token into persistent storage", () => {
+    expect(persistentGoogleTokens({
+      refreshToken: "test-refresh-token",
+      accessToken: "test-access-token",
+      expiryDate: 2_000_000_000_000,
+      scope: "openid gmail.send",
+      tokenType: "Bearer",
+    })).toEqual({ refreshToken: "test-refresh-token" });
+  });
+
+  it("keeps access credentials in memory while writing only the refresh token to the keyring", async () => {
+    const persisted = new Map<string, string>();
+    const vault = new KeyringCredentialVault((accountId) => ({
+      getPassword: async () => persisted.get(accountId) ?? null,
+      setPassword: async (value: string) => { persisted.set(accountId, value); },
+      deleteCredential: async () => { persisted.delete(accountId); },
+    }));
+    const tokens = {
+      refreshToken: "test-refresh-token",
+      accessToken: "test-access-token",
+      expiryDate: 2_000_000_000_000,
+    };
+
+    await vault.set("account-1", tokens);
+
+    expect(persisted.get("account-1")).toBe('{"refreshToken":"test-refresh-token"}');
+    expect(await vault.get("account-1")).toEqual(tokens);
+  });
+
+  it("shrinks an existing full keyring record when it is first read", async () => {
+    const persisted = new Map([[
+      "account-1",
+      JSON.stringify({
+        refreshToken: "test-refresh-token",
+        accessToken: "legacy-access-token",
+        expiryDate: 2_000_000_000_000,
+        idToken: "unused-identity-token",
+      }),
+    ]]);
+    const vault = new KeyringCredentialVault((accountId) => ({
+      getPassword: async () => persisted.get(accountId) ?? null,
+      setPassword: async (value: string) => { persisted.set(accountId, value); },
+      deleteCredential: async () => { persisted.delete(accountId); },
+    }));
+
+    expect(await vault.get("account-1")).toEqual({
+      refreshToken: "test-refresh-token",
+      accessToken: "legacy-access-token",
+      expiryDate: 2_000_000_000_000,
+    });
+    expect(persisted.get("account-1")).toBe('{"refreshToken":"test-refresh-token"}');
+  });
+
   it("round trips tokens without sharing object references", async () => {
     const vault = new MemoryCredentialVault();
     const tokens = { refreshToken: "test-refresh-token", accessToken: "test-access-token" };

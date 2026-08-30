@@ -1,6 +1,6 @@
 # Release verification
 
-Verified on 2026-08-29 against the current repository state with Node.js 22.
+Verified on 2026-08-30 against the current repository state with Node.js 22.
 
 ## Automated evidence
 
@@ -9,11 +9,11 @@ Verified on 2026-08-29 against the current repository state with Node.js 22.
 - Public-tree scanner: passed with no findings.
 - Oxlint: passed with no warnings or errors.
 - Source and test type-check: passed.
-- Vitest: 111 tests passed across 18 files.
+- Vitest: 146 tests passed across 24 files.
 - TypeScript project build: passed.
-- Vite production build: passed with 2,076 modules transformed.
+- Vite production build: passed with 2,078 modules transformed.
 
-The tests cover local-request Host and Origin enforcement, campaign admission and delivery safeguards, sending windows and caps, ambiguous delivery outcomes, CSV review, OAuth session isolation, local credential removal, backup redaction, and the public-tree scanner.
+The tests cover local-request Host and Origin enforcement, single-process data-directory locking, campaign admission and delivery safeguards, sending windows and caps, ambiguous delivery outcomes, list migration and membership, lead pagination and bulk deletion, CSV review, OAuth session isolation, refresh-token-only keyring persistence, local credential removal, backup redaction, and the public-tree scanner.
 
 ## Repository checks
 

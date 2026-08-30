@@ -256,7 +256,6 @@ export class GoogleAuthLibraryProvider implements GoogleOAuthProvider {
         ...(tokens.expiry_date ? { expiryDate: tokens.expiry_date } : {}),
         ...(tokens.scope ? { scope: tokens.scope } : {}),
         ...(tokens.token_type ? { tokenType: tokens.token_type } : {}),
-        ...(tokens.id_token ? { idToken: tokens.id_token } : {}),
       },
     };
   }

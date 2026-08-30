@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createCampaign, renderMessage } from "../domain/campaigns";
-import { deriveLeadStatus, mergeLeads } from "../domain/leads";
-import type { Account, ContactInput } from "../domain/types";
+import { normalizeEmail } from "../domain/email";
+import { indexLeadStatuses, mergeLeads } from "../domain/leads";
+import type { Account, ContactInput, ContactList, LeadStatus } from "../domain/types";
 import type { GmailAccountAdapter } from "../gmail/adapter";
+import { APP_VERSION } from "../version";
 import {
   GoogleOAuthFlowError,
   type GoogleOAuthStatus,
@@ -26,13 +28,16 @@ export interface AppDependencies {
   oauth?: GoogleOAuthCoordinator;
   oauthRedirectUri?: string;
   clock?: () => Date;
+  version?: string;
 }
 
 class PublicError extends Error {}
+class ConflictError extends Error {}
 
 export function createApp(dependencies: AppDependencies) {
   const app = express();
   const clock = dependencies.clock ?? (() => new Date());
+  const version = dependencies.version ?? APP_VERSION;
   const runner = new CampaignRunner({
     campaigns: dependencies.repositories.campaigns,
     accounts: dependencies.repositories.accounts,
@@ -46,7 +51,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use(express.json({ limit: "12mb" }));
 
   app.get("/api/health", (_request, response) => {
-    response.json({ ok: true, product: "TinyMails", version: "0.1.0" });
+    response.json({ ok: true, product: "TinyMails", version });
   });
 
   app.get("/api/accounts", asyncRoute(async (_request, response) => {
@@ -147,41 +152,135 @@ export function createApp(dependencies: AppDependencies) {
     response.json({ ok: true });
   }));
 
-  app.get("/api/leads", asyncRoute(async (_request, response) => {
-    const [leads, campaigns, suppressed] = await Promise.all([
+  app.get("/api/lists", asyncRoute(async (_request, response) => {
+    const [lists, leads] = await Promise.all([
+      dependencies.repositories.lists.list(),
+      dependencies.repositories.leads.list(),
+    ]);
+    response.json({ lists: listSummaries(lists, leads) });
+  }));
+
+  app.get("/api/leads", asyncRoute(async (request, response) => {
+    const [leads, campaigns, suppressed, lists] = await Promise.all([
       dependencies.repositories.leads.list(),
       dependencies.repositories.campaigns.list(),
       dependencies.repositories.suppression.list(),
+      dependencies.repositories.lists.list(),
     ]);
+    const listId = queryString(request.query.listId);
+    if (listId && !lists.some((list) => list.id === listId)) {
+      throw new PublicError("That list no longer exists. Refresh and choose another list.");
+    }
+    const query = queryString(request.query.query)?.trim().toLocaleLowerCase() ?? "";
+    const status = leadStatusQuery(request.query.status);
+    const pageSize = Math.min(positiveWholeQuery(request.query.pageSize, 50), 100);
+    const requestedPage = positiveWholeQuery(request.query.page, 1);
     const suppression = new Set(suppressed);
-    const decorated = leads.map((lead) => ({
-      ...lead,
-      status: deriveLeadStatus(lead, campaigns, suppression),
-    }));
+    const statuses = indexLeadStatuses(campaigns, suppression);
+    const decorated = leads
+      .map((lead) => ({
+        ...lead,
+        status: statuses.get(normalizeEmail(lead.email) ?? lead.email) ?? "new",
+      }))
+      .filter((lead) => !listId || lead.listIds.includes(listId))
+      .filter((lead) => !query || leadSearchText(lead).includes(query))
+      .sort((left, right) => right.addedAt.localeCompare(left.addedAt) || left.email.localeCompare(right.email));
     const counts: Record<string, number> = { total: decorated.length };
     for (const lead of decorated) counts[lead.status] = (counts[lead.status] ?? 0) + 1;
+    const filtered = status ? decorated.filter((lead) => lead.status === status) : decorated;
+    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const page = Math.min(requestedPage, pages);
+    const start = (page - 1) * pageSize;
     response.json({
-      leads: decorated,
+      leads: filtered.slice(start, start + pageSize),
       counts,
-      sources: [...new Set(leads.map((lead) => lead.source))].sort(),
+      lists: listSummaries(lists, leads),
+      pagination: { page, pageSize, total: filtered.length, pages },
     });
   }));
 
   app.post("/api/leads/import", asyncRoute(async (request, response) => {
     const body = objectBody(request.body);
     if (!Array.isArray(body.leads)) throw new PublicError("Leads must be an array.");
-    if (typeof body.source !== "string" || !body.source.trim()) {
-      throw new PublicError("A source name is required.");
-    }
-    const source = body.source.trim();
     const incoming = body.leads.filter(isContactInput);
     if (incoming.length !== body.leads.length) throw new PublicError("Every lead needs an email address.");
+    const list = await resolveImportList(dependencies.repositories, body.target, clock().toISOString());
     let result: ReturnType<typeof mergeLeads> | null = null;
     await dependencies.repositories.leads.update((leads) => {
-      result = mergeLeads(leads, incoming, source, clock().toISOString());
+      result = mergeLeads(leads, incoming, list.id, clock().toISOString());
       return result.leads;
     });
-    response.json(result);
+    const completed = result as ReturnType<typeof mergeLeads> | null;
+    if (!completed) throw new Error("Lead import did not produce a result.");
+    response.json({ ...completed, list });
+  }));
+
+  app.post("/api/leads/bulk", asyncRoute(async (request, response) => {
+    const body = objectBody(request.body);
+    const selection = objectBody(body.selection);
+    const operation = objectBody(body.operation);
+    const [leads, campaigns, suppressed, lists] = await Promise.all([
+      dependencies.repositories.leads.list(),
+      dependencies.repositories.campaigns.list(),
+      dependencies.repositories.suppression.list(),
+      dependencies.repositories.lists.list(),
+    ]);
+    const statuses = indexLeadStatuses(campaigns, new Set(suppressed));
+    const selectedEmails = resolveBulkSelection(
+      selection,
+      leads.map((lead) => ({
+        ...lead,
+        status: statuses.get(normalizeEmail(lead.email) ?? lead.email) ?? "new",
+      })),
+      lists,
+    );
+    const type = operation.type;
+
+    if (type === "add-to-list" || type === "remove-from-list") {
+      const listId = requiredListId(operation.listId, lists);
+      let affected = 0;
+      await dependencies.repositories.leads.update((records) => records.map((lead) => {
+        if (!selectedEmails.has(lead.email)) return lead;
+        const includesList = lead.listIds.includes(listId);
+        if (type === "add-to-list" && !includesList) {
+          affected += 1;
+          return { ...lead, listIds: [...lead.listIds, listId] };
+        }
+        if (type === "remove-from-list" && includesList) {
+          affected += 1;
+          return { ...lead, listIds: lead.listIds.filter((id) => id !== listId) };
+        }
+        return lead;
+      }));
+      response.json({ affected, skipped: 0, skippedEmails: [] });
+      return;
+    }
+
+    if (type !== "delete") throw new PublicError("Choose a valid bulk action.");
+    const sending = new Set(campaigns.flatMap((campaign) => campaign.recipients
+      .filter((recipient) => recipient.status === "sending" && selectedEmails.has(recipient.email))
+      .map((recipient) => recipient.email)));
+    const deletable = new Set([...selectedEmails].filter((email) => !sending.has(email)));
+
+    for (const campaign of campaigns) {
+      if (!campaign.recipients.some((recipient) =>
+        deletable.has(recipient.email)
+        && (recipient.status === "pending" || recipient.status === "not-sent"))) continue;
+      await dependencies.repositories.campaigns.update(campaign.id, (record) => ({
+        ...record,
+        recipients: record.recipients.filter((recipient) =>
+          !deletable.has(recipient.email)
+          || (recipient.status !== "pending" && recipient.status !== "not-sent")),
+      }));
+    }
+    let affected = 0;
+    await dependencies.repositories.leads.update((records) => records.filter((lead) => {
+      if (!deletable.has(lead.email)) return true;
+      affected += 1;
+      return false;
+    }));
+    const skippedEmails = [...sending].sort();
+    response.json({ affected, skipped: skippedEmails.length, skippedEmails });
   }));
 
   app.get("/api/campaigns", asyncRoute(async (_request, response) => {
@@ -313,7 +412,12 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/api/campaigns/:id/pause", asyncRoute(async (request, response) => {
     const campaign = await dependencies.repositories.campaigns.update(
       firstParam(request.params.id),
-      (record) => ({ ...record, status: "paused", pauseReason: "Paused manually." }),
+      (record) => {
+        if (record.status !== "running") {
+          throw new ConflictError("Only a running campaign can be paused.");
+        }
+        return { ...record, status: "paused", pauseReason: "Paused manually." };
+      },
     );
     if (!campaign) {
       response.status(404).json({ error: "Campaign not found." });
@@ -393,16 +497,17 @@ export function createApp(dependencies: AppDependencies) {
     response.json({
       accounts: (await dependencies.repositories.accounts.list()).map(publicAccount),
       dataDir: dependencies.dataDir,
-      version: "0.1.0",
+      version,
       suppressionCount: (await dependencies.repositories.suppression.list()).length,
     });
   }));
 
   app.get("/api/backup", asyncRoute(async (_request, response) => {
-    const [accounts, campaigns, leads, templates, suppression] = await Promise.all([
+    const [accounts, campaigns, leads, lists, templates, suppression] = await Promise.all([
       dependencies.repositories.accounts.list(),
       dependencies.repositories.campaigns.list(),
       dependencies.repositories.leads.list(),
+      dependencies.repositories.lists.list(),
       dependencies.repositories.templates.list(),
       dependencies.repositories.suppression.list(),
     ]);
@@ -411,13 +516,14 @@ export function createApp(dependencies: AppDependencies) {
       .set("Content-Disposition", `attachment; filename="tinymails-backup-${exportedAt.slice(0, 10)}.json"`)
       .json({
         product: "TinyMails",
-        version: "0.1.0",
+        version,
         exportedAt,
         credentialsIncluded: false,
         data: {
           accounts: accounts.map(publicAccount),
           campaigns,
           leads,
+          lists,
           templates,
           suppression,
         },
@@ -427,6 +533,10 @@ export function createApp(dependencies: AppDependencies) {
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     if (isPayloadTooLarge(error)) {
       response.status(413).json({ error: "That request is larger than TinyMails' 12 MB local limit." });
+      return;
+    }
+    if (error instanceof ConflictError) {
+      response.status(409).json({ error: error.message });
       return;
     }
     if (error instanceof PublicError) {
@@ -495,6 +605,122 @@ function objectBody(value: unknown): Record<string, unknown> {
 
 function isContactInput(value: unknown): value is ContactInput {
   return Boolean(value && typeof value === "object" && typeof (value as { email?: unknown }).email === "string");
+}
+
+async function resolveImportList(
+  repositories: Repositories,
+  value: unknown,
+  now: string,
+): Promise<ContactList> {
+  const target = objectBody(value);
+  const listId = typeof target.listId === "string" ? target.listId.trim() : "";
+  const listName = typeof target.listName === "string" ? target.listName.trim() : "";
+  if (Boolean(listId) === Boolean(listName)) {
+    throw new PublicError("Choose an existing list or enter a new list name.");
+  }
+  if (listId) {
+    const list = await repositories.lists.get(listId);
+    if (!list) throw new PublicError("That list no longer exists. Refresh and choose another list.");
+    return list;
+  }
+  if (listName.length > 100) throw new PublicError("List names cannot exceed 100 characters.");
+  const key = normalizedListName(listName);
+  return repositories.lists.findOrCreate(
+    (list) => normalizedListName(list.name) === key,
+    () => ({ id: randomUUID(), name: listName, createdAt: now, updatedAt: now }),
+  );
+}
+
+function listSummaries(lists: ContactList[], leads: Array<{ listIds: string[] }>) {
+  return lists
+    .map((list) => ({
+      ...list,
+      contactCount: leads.filter((lead) => lead.listIds.includes(list.id)).length,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function normalizedListName(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+function queryString(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function positiveWholeQuery(value: unknown, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string" || !/^\d+$/.test(value) || Number(value) < 1) {
+    throw new PublicError("Page values must be positive whole numbers.");
+  }
+  return Number(value);
+}
+
+function leadStatusQuery(value: unknown): LeadStatus | null {
+  if (value === undefined || value === "") return null;
+  if (value === "new" || value === "queued" || value === "contacted" || value === "do-not-contact") {
+    return value;
+  }
+  throw new PublicError("Choose a valid lead status.");
+}
+
+function leadSearchText(lead: ContactInput): string {
+  return [lead.email, lead.firstName, lead.company]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLocaleLowerCase();
+}
+
+function resolveBulkSelection(
+  selection: Record<string, unknown>,
+  leads: Array<ContactInput & { listIds: string[]; status: LeadStatus }>,
+  lists: ContactList[],
+): Set<string> {
+  if (selection.mode === "emails") {
+    if (!Array.isArray(selection.emails) || !selection.emails.every((email) => typeof email === "string")) {
+      throw new PublicError("Choose at least one valid contact.");
+    }
+    const known = new Set(leads.map((lead) => lead.email));
+    return new Set(selection.emails
+      .map((email) => normalizeEmail(email))
+      .filter((email): email is string => Boolean(email && known.has(email))));
+  }
+  if (selection.mode !== "filter") throw new PublicError("Choose a valid contact selection.");
+  const listId = optionalString(selection.listId);
+  if (listId) requiredListId(listId, lists);
+  const query = optionalString(selection.query).toLocaleLowerCase();
+  const status = bodyLeadStatus(selection.status);
+  const excluded = new Set(Array.isArray(selection.excludedEmails)
+    ? selection.excludedEmails
+        .filter((email): email is string => typeof email === "string")
+        .map((email) => normalizeEmail(email))
+        .filter((email): email is string => Boolean(email))
+    : []);
+  return new Set(leads
+    .filter((lead) => !listId || lead.listIds.includes(listId))
+    .filter((lead) => !query || leadSearchText(lead).includes(query))
+    .filter((lead) => !status || lead.status === status)
+    .filter((lead) => !excluded.has(lead.email))
+    .map((lead) => lead.email));
+}
+
+function requiredListId(value: unknown, lists: ContactList[]): string {
+  if (typeof value !== "string" || !lists.some((list) => list.id === value)) {
+    throw new PublicError("That list no longer exists. Refresh and choose another list.");
+  }
+  return value;
+}
+
+function optionalString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function bodyLeadStatus(value: unknown): LeadStatus | null {
+  if (value === undefined || value === "") return null;
+  if (value === "new" || value === "queued" || value === "contacted" || value === "do-not-contact") {
+    return value;
+  }
+  throw new PublicError("Choose a valid lead status.");
 }
 
 function campaignInput(body: Record<string, unknown>, now: string) {

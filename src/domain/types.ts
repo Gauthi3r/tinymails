@@ -39,8 +39,15 @@ export interface ContactInput {
   company?: string;
 }
 
+export interface ContactList {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Lead extends ContactInput {
-  source: string;
+  listIds: string[];
   addedAt: string;
 }
 

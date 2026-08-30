@@ -11,20 +11,25 @@ import {
   type LeadColumnMapping,
   type LeadCsvReview,
 } from "../domain/csv";
-import type { AppApi } from "./api";
+import type { AppApi, ContactListSummary, ImportLeadsResponse } from "./api";
 
 export function CsvImportPanel({
   api,
+  lists,
+  defaultListId,
   onClose,
   onImported,
 }: {
   api: AppApi;
+  lists: ContactListSummary[];
+  defaultListId?: string;
   onClose: () => void;
-  onImported: () => Promise<void>;
+  onImported: (result: ImportLeadsResponse) => Promise<void> | void;
 }) {
   const [table, setTable] = useState<CsvTable | null>(null);
   const [mapping, setMapping] = useState<LeadColumnMapping>({});
-  const [source, setSource] = useState("");
+  const [listChoice, setListChoice] = useState(defaultListId || lists[0]?.id || "new");
+  const [newListName, setNewListName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const review = useMemo(() => safeReview(table, mapping), [mapping, table]);
@@ -42,7 +47,7 @@ export function CsvImportPanel({
       const detected = defaultLeadMapping(parsed.headers);
       setTable(parsed);
       setMapping(detected);
-      setSource(file.name.replace(/\.csv$/i, "") || "CSV import");
+      if (listChoice === "new") setNewListName(file.name.replace(/\.csv$/i, "") || "CSV import");
       setMessage(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "TinyMails could not read that CSV.");
@@ -50,13 +55,16 @@ export function CsvImportPanel({
   }
 
   async function importRows() {
-    if (!review || !source.trim() || review.contacts.length === 0) return;
+    const target = listChoice === "new"
+      ? { listName: newListName.trim() }
+      : { listId: listChoice };
+    if (!review || !("listId" in target || target.listName) || review.contacts.length === 0) return;
     setImporting(true);
     setMessage(null);
     try {
-      const result = await api.importLeads(source.trim(), review.contacts);
-      setMessage(`${result.added} ${result.added === 1 ? "lead" : "leads"} added.`);
-      await onImported();
+      const result = await api.importLeads(target, review.contacts);
+      await onImported(result);
+      onClose();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The leads could not be imported.");
     } finally {
@@ -88,15 +96,30 @@ export function CsvImportPanel({
           />
         </label>
         <label className="flex-1 text-xs font-medium text-muted-foreground">
-          Source name
+          List
+          <select
+            aria-label="Import contacts into"
+            value={listChoice}
+            onChange={(event) => setListChoice(event.target.value)}
+            className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+          >
+            {lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
+            <option value="new">Create new list</option>
+          </select>
+        </label>
+      </div>
+
+      {listChoice === "new" ? (
+        <label className="mt-3 block text-xs font-medium text-muted-foreground">
+          New list name
           <input
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
+            value={newListName}
+            onChange={(event) => setNewListName(event.target.value)}
             className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
             placeholder="Community list"
           />
         </label>
-      </div>
+      ) : null}
 
       {table ? (
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -111,7 +134,11 @@ export function CsvImportPanel({
       <div className="mt-5 flex justify-end">
         <Button
           loading={importing}
-          disabled={!review || review.contacts.length === 0 || !source.trim()}
+          disabled={
+            !review
+            || review.contacts.length === 0
+            || (listChoice === "new" ? !newListName.trim() : !listChoice)
+          }
           onClick={() => void importRows()}
           aria-label={`Import ${review?.contacts.length ?? 0} leads`}
         >

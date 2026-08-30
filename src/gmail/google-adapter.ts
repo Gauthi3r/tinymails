@@ -117,7 +117,6 @@ class GoogleAuthTransport implements GoogleTransport {
       ...(tokens.expiryDate ? { [expiryDateKey]: tokens.expiryDate } : {}),
       ...(tokens.scope ? { scope: tokens.scope } : {}),
       ...(tokens.tokenType ? { [tokenTypeKey]: tokens.tokenType } : {}),
-      ...(tokens.idToken ? { [idTokenKey]: tokens.idToken } : {}),
     });
   }
 
@@ -144,7 +143,6 @@ class GoogleAuthTransport implements GoogleTransport {
       ...(tokens.expiry_date ? { expiryDate: tokens.expiry_date } : {}),
       ...(tokens.scope ? { scope: tokens.scope } : {}),
       ...(tokens.token_type ? { tokenType: tokens.token_type } : {}),
-      ...(tokens.id_token ? { idToken: tokens.id_token } : {}),
     };
   }
 }
@@ -185,6 +183,5 @@ const refreshTokenKey = "refresh_token";
 const accessTokenKey = "access_token";
 const expiryDateKey = "expiry_date";
 const tokenTypeKey = "token_type";
-const idTokenKey = "id_token";
 const reconnectMessage = "Reconnect this Gmail account in Settings.";
 const temporaryMessage = "Gmail is temporarily unavailable. Try again shortly.";

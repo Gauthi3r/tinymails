@@ -6,6 +6,9 @@ import { SquircleCard, SquircleCardRow } from "../components/squircle-card";
 import type { AppApi, PublicAccount, SettingsResponse } from "./api";
 import { PageFrame } from "./CampaignsPage";
 
+const googleActionClass =
+  "inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--primary)_80%,#3a3480)] bg-[color-mix(in_srgb,var(--primary)_90%,#3a3480)] px-3 text-sm font-medium text-primary-foreground shadow-[inset_0_1px_0_rgb(254_254_254_/_22%)] transition-all hover:bg-primary focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
 export function SettingsPage({
   api,
   settings,
@@ -20,6 +23,10 @@ export function SettingsPage({
   const [connectionAccount, setConnectionAccount] = useState<PublicAccount | null>(null);
   const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [pendingAuthorization, setPendingAuthorization] = useState<{
+    sessionId: string;
+    authorizationUrl: string;
+  } | null>(null);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<string | null>(null);
@@ -43,6 +50,7 @@ export function SettingsPage({
     event.target.value = "";
     if (!file) return;
     setConnectionMessage(null);
+    setPendingAuthorization(null);
     if (file.size > 256_000) {
       setConnectionMessage("That OAuth client file is unexpectedly large.");
       return;
@@ -53,14 +61,32 @@ export function SettingsPage({
     try {
       const client = JSON.parse(await readText(file)) as unknown;
       const started = await api.startGoogleOAuth(client);
-      if (popup) popup.location.href = started.authorizationUrl;
-      else setConnectionMessage("Your browser blocked the Google window. Allow popups and choose the file again.");
+      if (!popup) {
+        setPendingAuthorization(started);
+        setConnecting(false);
+        setConnectionMessage("Google authorization is ready. Continue with Google below.");
+        return;
+      }
+      popup.location.href = started.authorizationUrl;
       await pollConnection(started.sessionId, popup);
     } catch (error) {
       popup?.close();
       setConnecting(false);
+      setPendingAuthorization(null);
       setConnectionMessage(error instanceof Error ? error.message : "Gmail could not be connected.");
     }
+  }
+
+  function continueGoogleAuthorization() {
+    if (!pendingAuthorization) return;
+    const { sessionId } = pendingAuthorization;
+    setPendingAuthorization(null);
+    setConnectionMessage(null);
+    setConnecting(true);
+    void pollConnection(sessionId, null).catch(() => {
+      setConnecting(false);
+      setConnectionMessage("TinyMails could not check the Google connection.");
+    });
   }
 
   async function pollConnection(sessionId: string, popup: Window | null): Promise<void> {
@@ -134,7 +160,6 @@ export function SettingsPage({
 
   return (
     <PageFrame
-      eyebrow="Local configuration"
       title="Settings"
       description="Gmail credentials and campaign data stay on this computer."
     >
@@ -158,10 +183,6 @@ export function SettingsPage({
               <li>Create an OAuth client with application type Desktop app.</li>
               <li>Download its JSON file, then choose it here.</li>
             </ol>
-            <p className="mt-3 text-xs leading-5 text-muted-foreground">
-              TinyMails requests your verified email and <code className="font-mono">gmail.send</code> only. Inbox
-              reading is off.
-            </p>
             <a
               href="https://console.cloud.google.com/apis/credentials"
               target="_blank"
@@ -171,22 +192,31 @@ export function SettingsPage({
               Open Google Cloud credentials <ExternalLink className="size-3.5" aria-hidden="true" />
             </a>
           </div>
-          <label
-            htmlFor="google-oauth-client"
-            className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--primary)_80%,#3a3480)] bg-[color-mix(in_srgb,var(--primary)_90%,#3a3480)] px-3 text-sm font-medium text-primary-foreground shadow-[inset_0_1px_0_rgb(254_254_254_/_22%)] transition-all hover:bg-primary focus-within:ring-[3px] focus-within:ring-ring/50"
-          >
-            <Upload className="size-4" aria-hidden="true" />
-            {connecting ? "Waiting for Google…" : "Choose OAuth client JSON"}
-            <input
-              id="google-oauth-client"
-              aria-label="Google OAuth client JSON"
-              type="file"
-              accept="application/json,.json"
-              className="sr-only"
-              disabled={connecting}
-              onChange={(event) => void chooseClient(event)}
-            />
-          </label>
+          {pendingAuthorization ? (
+            <a
+              href={pendingAuthorization.authorizationUrl}
+              target="tinymails-google"
+              rel="noopener noreferrer"
+              onClick={continueGoogleAuthorization}
+              className={googleActionClass}
+            >
+              Continue with Google <ExternalLink className="size-4" aria-hidden="true" />
+            </a>
+          ) : (
+            <label htmlFor="google-oauth-client" className={googleActionClass}>
+              <Upload className="size-4" aria-hidden="true" />
+              {connecting ? "Waiting for Google…" : "Choose OAuth client JSON"}
+              <input
+                id="google-oauth-client"
+                aria-label="Google OAuth client JSON"
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                disabled={connecting}
+                onChange={(event) => void chooseClient(event)}
+              />
+            </label>
+          )}
         </div>
       </SquircleCard>
       <div className="grid gap-4 md:grid-cols-2">

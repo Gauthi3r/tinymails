@@ -20,11 +20,13 @@ export function TabBar({
   tabs,
   activeId,
   onChange,
+  brand,
   className,
 }: {
   tabs: readonly Tab[];
   activeId: string;
   onChange: (id: string) => void;
+  brand?: { label: string; imageSrc: string; imageAlt: string; onClick: () => void };
   className?: string;
 }) {
   const activeIndex = tabs.findIndex((tab) => tab.id === activeId);
@@ -45,6 +47,17 @@ export function TabBar({
         className,
       )}
     >
+      {brand ? (
+        <button
+          type="button"
+          aria-label={brand.label}
+          onClick={brand.onClick}
+          className="flex h-8 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <img src={brand.imageSrc} alt={brand.imageAlt} className="size-7 object-contain" />
+        </button>
+      ) : null}
+      {brand ? <span className="mx-0.5 h-5 w-px bg-border" aria-hidden="true" /> : null}
       {tabs.map((tab) => {
         const selected = tab.id === activeId;
         return (

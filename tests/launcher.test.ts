@@ -30,7 +30,9 @@ describe("local launcher", () => {
   });
 
   it("does not reuse an unverifiable TinyMails process", () => {
-    expect(occupiedPortError("tinymails", 3210)).toContain("cannot verify its data directory");
+    expect(occupiedPortError("tinymails", 3210)).toBe(
+      "Port 3210 is already running TinyMails. Stop that process before starting TinyMails again.",
+    );
     expect(occupiedPortError("free", 3210)).toBeNull();
   });
 });

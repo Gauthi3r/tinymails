@@ -1,28 +1,60 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Campaign } from "../domain/types";
 import type { AppApi } from "./api";
 import { CampaignsPage } from "./CampaignsPage";
 
 describe("campaign composer", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("keeps the new campaign action inside the empty campaign surface", async () => {
+    render(<CampaignsPage api={fakeApi()} />);
+
+    const emptyState = await screen.findByRole("region", { name: "Empty campaigns" });
+    const action = within(emptyState).getByRole("button", { name: "New campaign" });
+
+    expect(action.closest("header")).toBeNull();
+  });
+
+  it("places the new campaign action in the page header when campaign history exists", async () => {
+    render(<CampaignsPage api={fakeApi([campaignFixture()])} />);
+
+    const action = await screen.findByRole("button", { name: "New campaign" });
+
+    expect(action.closest("header")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Empty campaigns" })).not.toBeInTheDocument();
+  });
+
   it("reviews personalized copy before saving a paused campaign", async () => {
     const api = fakeApi();
     render(<CampaignsPage api={api} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
     expect(await screen.findByRole("heading", { name: "Recipients" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Campaign composer" })).toHaveClass("h-full");
+    expect(screen.getByRole("group", { name: "Campaign composer actions" })).toHaveClass("shrink-0");
+    expect(screen.getByLabelText("Recipient list")).toHaveValue("list-beta");
+    expect(screen.getByRole("button", { name: "Upload CSV" })).toBeVisible();
+    await waitFor(() => expect(api.getLeads).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 100,
+      listId: "list-beta",
+    }));
     expect(screen.getByText("0 available leads selected")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Select all available" }));
-    expect(screen.getByText("2 available leads selected")).toBeVisible();
+    expect(await screen.findByText("2 available leads selected")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Continue to Write" }));
 
     await userEvent.type(screen.getByLabelText("Campaign name"), "Beta note");
     fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "A note for {company}" } });
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Hi {firstName}, a careful update." } });
     await userEvent.click(screen.getByRole("button", { name: "Continue to Delivery" }));
+    expect(screen.getByText("Sender")).toBeVisible();
     expect(screen.getByText("sender@example.com")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Continue to Review" }));
 
@@ -40,7 +72,97 @@ describe("campaign composer", () => {
         expect.objectContaining({ email: "grace@example.org" }),
       ],
     }));
+    expect(api.startCampaign).not.toHaveBeenCalled();
     expect(await screen.findByText("Beta note")).toBeVisible();
+    expect(window.localStorage.length).toBe(0);
+  });
+
+  it("opens the existing reviewed CSV import from the recipients step", async () => {
+    render(<CampaignsPage api={fakeApi()} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
+
+    expect(screen.getByRole("heading", { name: "Review a CSV import" })).toBeVisible();
+    expect(screen.getByLabelText("CSV file")).toBeVisible();
+  });
+
+  it("selects every available contact across a paginated list", async () => {
+    const api = fakeApi();
+    const base = await api.getLeads();
+    api.getLeads.mockImplementation(async (filters?: { page?: number }) => ({
+      ...base,
+      leads: filters?.page === 2 ? [base.leads[1]] : [base.leads[0]],
+      pagination: { page: filters?.page ?? 1, pageSize: 100, total: 2, pages: 2 },
+    }));
+    render(<CampaignsPage api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Select all available" }));
+
+    expect(await screen.findByText("2 available leads selected")).toBeVisible();
+    expect(api.getLeads).toHaveBeenCalledWith({
+      page: 2,
+      pageSize: 100,
+      listId: "list-beta",
+      status: "new",
+    });
+  });
+
+  it("inserts personalization variables at the active field's caret", async () => {
+    render(<CampaignsPage api={fakeApi()} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await userEvent.click(screen.getByRole("button", { name: "Select all available" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue to Write" }));
+
+    const subject = screen.getByLabelText("Subject") as HTMLInputElement;
+    fireEvent.change(subject, { target: { value: "Hello team" } });
+    subject.focus();
+    subject.setSelectionRange(6, 6);
+    fireEvent.select(subject);
+    await userEvent.click(screen.getByRole("button", { name: "Insert {company}" }));
+    expect(subject).toHaveValue("Hello {company}team");
+
+    const message = screen.getByLabelText("Message") as HTMLTextAreaElement;
+    fireEvent.change(message, { target: { value: "Hi there" } });
+    message.focus();
+    message.setSelectionRange(3, 3);
+    fireEvent.select(message);
+    await userEvent.click(screen.getByRole("button", { name: "Insert {firstName}" }));
+    expect(message).toHaveValue("Hi {firstName}there");
+  });
+
+  it("shows and restores a browser-local campaign draft after a refresh", async () => {
+    const api = fakeApi();
+    const firstRender = render(<CampaignsPage api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await userEvent.click(screen.getByRole("button", { name: "Select all available" }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue to Write" }));
+    await userEvent.type(screen.getByLabelText("Campaign name"), "Unfinished note");
+    await waitFor(() => expect(window.localStorage.length).toBe(1));
+
+    firstRender.unmount();
+    render(<CampaignsPage api={api} />);
+
+    expect(await screen.findByText("Draft")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Resume Unfinished note" }));
+    expect(await screen.findByRole("heading", { name: "Write" })).toBeVisible();
+    expect(screen.getByLabelText("Campaign name")).toHaveValue("Unfinished note");
+  });
+
+  it("discards a saved browser-local draft", async () => {
+    const api = fakeApi();
+    render(<CampaignsPage api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "New campaign" }));
+    await waitFor(() => expect(window.localStorage.length).toBe(1));
+    await userEvent.click(screen.getByRole("button", { name: "Close campaign composer" }));
+    await userEvent.click(screen.getByRole("button", { name: "Discard Untitled campaign" }));
+
+    expect(window.localStorage.length).toBe(0);
+    expect(screen.getByRole("button", { name: "New campaign" })).toBeVisible();
   });
 
   it("shows the server's final recipient count before closing the review", async () => {
@@ -118,16 +240,24 @@ function campaignFixture(): Campaign {
 
 function fakeApi(initialCampaigns: Campaign[] = []) {
   const campaign = campaignFixture();
+  const list = {
+    id: "list-beta",
+    name: "Beta",
+    createdAt: campaign.createdAt,
+    updatedAt: campaign.createdAt,
+    contactCount: 3,
+  };
   return {
     getCampaigns: vi.fn(async () => initialCampaigns),
     getLeads: vi.fn(async () => ({
       leads: [
-        { email: "ada@example.com", firstName: "Ada", company: "Analytical Engines", source: "Beta", addedAt: campaign.createdAt, status: "new" as const },
-        { email: "grace@example.org", firstName: "Grace", company: "Compiler Studio", source: "Beta", addedAt: campaign.createdAt, status: "new" as const },
-        { email: "known@example.net", source: "Beta", addedAt: campaign.createdAt, status: "contacted" as const },
+        { email: "ada@example.com", firstName: "Ada", company: "Analytical Engines", listIds: [list.id], addedAt: campaign.createdAt, status: "new" as const },
+        { email: "grace@example.org", firstName: "Grace", company: "Compiler Studio", listIds: [list.id], addedAt: campaign.createdAt, status: "new" as const },
+        { email: "known@example.net", listIds: [list.id], addedAt: campaign.createdAt, status: "contacted" as const },
       ],
       counts: { total: 3, new: 2, contacted: 1 },
-      sources: ["Beta"],
+      lists: [list],
+      pagination: { page: 1, pageSize: 100, total: 3, pages: 1 },
     })),
     getSettings: vi.fn(async () => ({
       accounts: [{
@@ -151,6 +281,7 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
     sendTestEmail: vi.fn(),
     updateAccount: vi.fn(),
     importLeads: vi.fn(),
+    bulkUpdateLeads: vi.fn(),
     createCampaign: vi.fn(async () => ({ campaign, excluded: [] })),
     testCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z" })),
     startCampaign: vi.fn(async () => ({ ...campaign, testedAt: "2026-08-29T10:01:00.000Z", status: "running" as const })),
@@ -163,5 +294,8 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
     suppressEmails: vi.fn(),
     getTemplates: vi.fn(async () => []),
     saveTemplate: vi.fn(),
-  } as unknown as AppApi & { createCampaign: ReturnType<typeof vi.fn> };
+  } as unknown as AppApi & {
+    createCampaign: ReturnType<typeof vi.fn>;
+    getLeads: ReturnType<typeof vi.fn>;
+  };
 }

@@ -7,6 +7,8 @@ This repository contains the source-first v0.1 release candidate. It includes th
 ## What it does
 
 - Imports and enriches contacts without overwriting known values.
+- Keeps each contact unique by email while allowing membership in multiple lists.
+- Paginates large contact libraries and supports bulk list changes or deletion.
 - Derives contact status from campaign history and the do-not-contact list.
 - Excludes duplicates, suppressed addresses, and contacts already queued elsewhere.
 - Persists campaign state after each send and flags interrupted deliveries for manual review.
@@ -39,6 +41,8 @@ npm start
 
 `npm start` builds the app, starts it only on `127.0.0.1`, and opens `http://127.0.0.1:3210`. Set `TINYMAILS_NO_OPEN=1` if you do not want it to open a browser.
 
+Only one TinyMails process may use a data directory, even when processes use different ports. A second process exits before campaign recovery or sending begins. Normal shutdown removes `instance.lock`. If TinyMails reports a stale lock after a crash or power loss, first confirm that no TinyMails process is running, then remove `instance.lock` from the data directory shown in the error.
+
 ## Connect Gmail
 
 TinyMails does not ship a shared OAuth client. Each user creates one in a Google Cloud project they control:
@@ -52,7 +56,7 @@ TinyMails does not ship a shared OAuth client. Each user creates one in a Google
 
 Google can show an unverified-app notice for a personal Testing configuration. Testing-mode authorization for an External app may also expire after seven days, requiring a reconnect. Publishing and verifying a shared OAuth app is a separate distribution step; bring-your-own OAuth does not bypass Google's consent or user rules.
 
-Client metadata stays under the local TinyMails data directory with user-only permissions. Tokens go to the operating-system credential vault. Neither is uploaded to a TinyMails service.
+Client metadata stays under the local TinyMails data directory with user-only permissions. The refresh token goes to the operating-system credential vault. Short-lived access credentials stay in process memory and disappear when TinyMails stops. None of this data is uploaded to a TinyMails service.
 
 Settings can disconnect a Gmail account and remove its local OAuth client and token. To revoke the grant at Google as well, remove TinyMails from your [Google Account connections](https://myaccount.google.com/connections).
 
@@ -83,7 +87,9 @@ TINYMAILS_DATA_DIR=/path/to/tinymails-data npm run serve
 
 Do not point this at the source checkout. The public-tree scanner rejects credential files, token-shaped values, logs, root CSV files, and non-example email addresses.
 
-To erase all TinyMails contacts, campaigns, templates, and suppression data, stop the app and remove the data directory shown in Settings. Disconnect each Gmail account first so its token is also removed from the operating-system credential vault. TinyMails does not yet provide selective contact deletion or backup restore.
+Do not share one data directory between simultaneous TinyMails processes. The exclusive `instance.lock` file enforces this boundary for both `npm start` and `npm run serve`.
+
+Use the Leads page to delete selected contacts from the contact library and unsent queues. Completed delivery history remains as an audit record. To erase all TinyMails contacts, campaigns, templates, and suppression data, stop the app and remove the data directory shown in Settings. Disconnect each Gmail account first so its token is also removed from the operating-system credential vault. TinyMails does not yet provide backup restore.
 
 ## Checks
 
@@ -102,7 +108,7 @@ Only contact people who expect to hear from you. Keep lists small, honor removal
 
 ## Roadmap
 
-The next useful additions are campaign cloning, lead editing and deletion, backup restore, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The [v0.1 design record](docs/superpowers/specs/2026-08-29-tinymails-v0.1-design.md) records the product and safety decisions behind this release.
+The next useful additions are campaign cloning, lead editing, list renaming, backup restore, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The [v0.1 design record](docs/superpowers/specs/2026-08-29-tinymails-v0.1-design.md) records the product and safety decisions behind this release.
 
 ## License
 

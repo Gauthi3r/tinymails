@@ -1,61 +1,100 @@
-import { Check, ChevronLeft, ChevronRight, Mail, Send, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Mail, Send, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
 import { SquircleSurface } from "../components/squircle-card";
 import { renderMessage } from "../domain/personalization";
 import type { Campaign, Template } from "../domain/types";
-import type { AppApi, LeadsResponse, PublicAccount, SettingsResponse } from "./api";
+import type { AppApi, ImportLeadsResponse, LeadsResponse, LeadView, PublicAccount, SettingsResponse } from "./api";
+import { clearCampaignDraft, saveCampaignDraft, type CampaignDraft } from "./campaign-draft";
+import { CsvImportPanel } from "./CsvImportPanel";
 
 const steps = ["Recipients", "Write", "Delivery", "Review"] as const;
 
 export function CampaignComposer({
   api,
+  initialDraft,
   onCancel,
   onCreated,
+  onDraftChange,
 }: {
   api: AppApi;
+  initialDraft: CampaignDraft | null;
   onCancel: () => void;
   onCreated: (campaign: Campaign) => void;
+  onDraftChange: (draft: CampaignDraft | null) => void;
 }) {
   const [leads, setLeads] = useState<LeadsResponse | null>(null);
+  const [contactCache, setContactCache] = useState<Map<string, LeadView>>(new Map());
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [step, setStep] = useState(0);
-  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
-  const [source, setSource] = useState("");
-  const [name, setName] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [dailyCap, setDailyCap] = useState(25);
-  const [delayMin, setDelayMin] = useState(30);
-  const [delayMax, setDelayMax] = useState(45);
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(initialDraft?.step ?? 0);
+  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set(initialDraft?.selectedEmails));
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set(initialDraft?.selectedAccounts));
+  const [listId, setListId] = useState(initialDraft?.listId ?? "");
+  const [name, setName] = useState(initialDraft?.name ?? "");
+  const [subject, setSubject] = useState(initialDraft?.subject ?? "");
+  const [body, setBody] = useState(initialDraft?.body ?? "");
+  const [dailyCap, setDailyCap] = useState(initialDraft?.dailyCap ?? 25);
+  const [delayMin, setDelayMin] = useState(initialDraft?.delayMin ?? 30);
+  const [delayMax, setDelayMax] = useState(initialDraft?.delayMax ?? 45);
+  const [importOpen, setImportOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [savedCampaign, setSavedCampaign] = useState<Campaign | null>(null);
+  const shouldDefaultAccount = useRef(initialDraft === null);
 
   useEffect(() => {
     let active = true;
-    void Promise.all([api.getLeads(), api.getSettings(), api.getTemplates()]).then(([leadData, settingsData, templateData]) => {
+    void Promise.all([
+      api.getLeads({ page: 1, pageSize: 100, ...(listId ? { listId } : {}) }),
+      api.getSettings(),
+      api.getTemplates(),
+    ]).then(([leadData, settingsData, templateData]) => {
       if (!active) return;
       setLeads(leadData);
+      cacheContacts(leadData.leads);
+      if (!listId && leadData.lists[0]) setListId(leadData.lists[0].id);
       setSettings(settingsData);
       setTemplates(templateData);
-      setSelectedAccounts(new Set(settingsData.accounts.slice(0, 1).map((account) => account.id)));
+      if (shouldDefaultAccount.current) {
+        setSelectedAccounts(new Set(settingsData.accounts.slice(0, 1).map((account) => account.id)));
+      }
     }).catch(() => {
       if (active) setMessage("TinyMails could not load leads and delivery settings.");
     });
     return () => { active = false; };
-  }, [api]);
+  }, [api, listId]);
+
+  useEffect(() => {
+    const draft: CampaignDraft = {
+      version: 2,
+      step,
+      selectedEmails: [...selectedEmails],
+      selectedAccounts: [...selectedAccounts],
+      listId,
+      name,
+      subject,
+      body,
+      dailyCap,
+      delayMin,
+      delayMax,
+      updatedAt: new Date().toISOString(),
+    };
+    saveCampaignDraft(window.localStorage, draft);
+    onDraftChange(draft);
+  }, [body, dailyCap, delayMax, delayMin, listId, name, onDraftChange, selectedAccounts, selectedEmails, step, subject]);
 
   const available = useMemo(
-    () => (leads?.leads ?? []).filter((lead) => lead.status === "new" && (!source || lead.source === source)),
-    [leads, source],
+    () => (leads?.leads ?? []).filter((lead) => lead.status === "new" && (!listId || lead.listIds.includes(listId))),
+    [leads, listId],
   );
   const selected = useMemo(
-    () => (leads?.leads ?? []).filter((lead) => selectedEmails.has(lead.email) && lead.status === "new"),
-    [leads, selectedEmails],
+    () => [...selectedEmails]
+      .map((email) => contactCache.get(email))
+      .filter((lead): lead is LeadView => Boolean(lead && lead.status === "new")),
+    [contactCache, selectedEmails],
   );
   const accounts = settings?.accounts ?? [];
   const selectedAccountRecords = accounts.filter((account) => selectedAccounts.has(account.id));
@@ -73,6 +112,52 @@ export function CampaignComposer({
     setSelectedAccounts((current) => toggled(current, account.id));
   }
 
+  function cacheContacts(contacts: LeadView[]): void {
+    setContactCache((current) => {
+      const next = new Map(current);
+      for (const contact of contacts) next.set(contact.email, contact);
+      return next;
+    });
+  }
+
+  async function selectAllAvailable(): Promise<void> {
+    if (!listId) return;
+    setSelectedEmails(new Set(available.map((lead) => lead.email)));
+    setSelectingAll(true);
+    setMessage(null);
+    try {
+      const first = await api.getLeads({ page: 1, pageSize: 100, listId, status: "new" });
+      const contacts = [...first.leads];
+      for (let page = 2; page <= first.pagination.pages; page += 1) {
+        const next = await api.getLeads({ page, pageSize: 100, listId, status: "new" });
+        contacts.push(...next.leads);
+      }
+      const availableContacts = contacts.filter((lead) => lead.status === "new");
+      cacheContacts(availableContacts);
+      setSelectedEmails(new Set(availableContacts.map((lead) => lead.email)));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The list could not be selected.");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
+  async function refreshLeads(preferredListId: string = listId) {
+    const refreshed = await api.getLeads({
+      page: 1,
+      pageSize: 100,
+      listId: preferredListId,
+    });
+    setLeads(refreshed);
+    cacheContacts(refreshed.leads);
+    setListId(preferredListId || refreshed.lists[0]?.id || "");
+  }
+
+  function finishDraft() {
+    clearCampaignDraft(window.localStorage);
+    onDraftChange(null);
+  }
+
   async function save() {
     setSaving(true);
     setMessage(null);
@@ -87,6 +172,7 @@ export function CampaignComposer({
         delayMaxSeconds: delayMax,
         recipients: selected.map(({ email, firstName, company }) => ({ email, firstName, company })),
       });
+      finishDraft();
       if (result.excluded.length > 0) {
         setSavedCampaign(result.campaign);
         setMessage(
@@ -114,8 +200,12 @@ export function CampaignComposer({
   }
 
   return (
-    <SquircleSurface className="overflow-hidden border border-border shadow-[var(--shadow-resting)]">
-      <div className="flex items-center justify-between border-b border-border bg-card px-5 py-4">
+    <SquircleSurface
+      role="region"
+      aria-label="Campaign composer"
+      className="h-full min-h-0 overflow-hidden border border-border shadow-[var(--shadow-resting)]"
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-5 py-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground">New campaign</p>
           <h2 className="mt-0.5 text-lg font-semibold tracking-[-0.025em]">{steps[step]}</h2>
@@ -125,12 +215,12 @@ export function CampaignComposer({
         </Button>
       </div>
 
-      <div className="grid grid-cols-4 border-b border-border bg-background px-3 sm:px-5">
+      <div className="grid shrink-0 grid-cols-4 border-b border-border bg-background px-3 sm:px-5">
         {steps.map((label, index) => (
           <button
             key={label}
             type="button"
-            onClick={() => { if (index < step) setStep(index); }}
+            onClick={() => { if (index < step) setStep(index as 0 | 1 | 2 | 3); }}
             disabled={index > step}
             className="flex min-h-12 items-center justify-center gap-1.5 border-b-2 border-transparent px-1 text-xs font-medium text-muted-foreground disabled:opacity-45 data-[active=true]:border-primary data-[active=true]:text-foreground sm:text-sm"
             data-active={index === step}
@@ -143,20 +233,22 @@ export function CampaignComposer({
         ))}
       </div>
 
-      <div className="min-h-[430px] bg-card p-5 sm:p-7">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-card p-5 sm:p-7">
         {message ? <NoticeStrip claim="Campaign">{message}</NoticeStrip> : null}
         {step === 0 ? (
           <RecipientsStep
+            api={api}
             data={leads}
             available={available}
             selected={selectedEmails}
-            source={source}
-            setSource={setSource}
+            listId={listId}
+            importOpen={importOpen}
+            setListId={setListId}
+            setImportOpen={setImportOpen}
             toggleEmail={toggleEmail}
-            selectAll={() => setSelectedEmails((current) => new Set([
-              ...current,
-              ...available.map((lead) => lead.email),
-            ]))}
+            refreshLeads={refreshLeads}
+            selectingAll={selectingAll}
+            selectAllAvailable={() => void selectAllAvailable()}
           />
         ) : null}
         {step === 1 ? (
@@ -197,12 +289,16 @@ export function CampaignComposer({
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between border-t border-border bg-background px-5 py-4">
-        <Button variant="ghost" disabled={step === 0 || Boolean(savedCampaign)} onClick={() => setStep((current) => Math.max(0, current - 1))}>
+      <div
+        role="group"
+        aria-label="Campaign composer actions"
+        className="flex shrink-0 items-center justify-between border-t border-border bg-background px-5 py-4"
+      >
+        <Button variant="ghost" disabled={step === 0 || Boolean(savedCampaign)} onClick={() => setStep((current) => Math.max(0, current - 1) as 0 | 1 | 2 | 3)}>
           <ChevronLeft className="size-4" aria-hidden="true" /> Back
         </Button>
         {step < 3 ? (
-          <Button disabled={!canContinue} onClick={() => setStep((current) => Math.min(3, current + 1))} aria-label={`Continue to ${steps[step + 1]}`}>
+          <Button disabled={!canContinue} onClick={() => setStep((current) => Math.min(3, current + 1) as 0 | 1 | 2 | 3)} aria-label={`Continue to ${steps[step + 1]}`}>
             Continue <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
         ) : savedCampaign ? (
@@ -219,35 +315,83 @@ export function CampaignComposer({
   );
 }
 
-function RecipientsStep({ data, available, selected, source, setSource, toggleEmail, selectAll }: {
+function RecipientsStep({
+  api,
+  data,
+  available,
+  selected,
+  listId,
+  importOpen,
+  setListId,
+  setImportOpen,
+  toggleEmail,
+  selectingAll,
+  selectAllAvailable,
+  refreshLeads,
+}: {
+  api: AppApi;
   data: LeadsResponse | null;
   available: LeadsResponse["leads"];
   selected: Set<string>;
-  source: string;
-  setSource: (source: string) => void;
+  listId: string;
+  importOpen: boolean;
+  setListId: (listId: string) => void;
+  setImportOpen: (open: boolean) => void;
   toggleEmail: (email: string) => void;
-  selectAll: () => void;
+  selectingAll: boolean;
+  selectAllAvailable: () => void;
+  refreshLeads: (listId?: string) => Promise<void>;
 }) {
-  const selectedCount = (data?.leads ?? []).filter((lead) => lead.status === "new" && selected.has(lead.email)).length;
+  const selectedCount = selected.size;
   return (
     <div>
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <p className="mt-1 text-sm text-muted-foreground">{selectedCount} available leads selected</p>
         </div>
-        <div className="flex items-end gap-2">
-          <Button variant="secondary" size="sm" onClick={selectAll} disabled={available.length === 0}>
+        <div className="flex flex-wrap items-end gap-2 sm:justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={selectAllAvailable}
+            loading={selectingAll}
+            disabled={available.length === 0}
+          >
             Select all available
           </Button>
           <label className="text-xs font-medium text-muted-foreground">
-            Source
-            <select value={source} onChange={(event) => setSource(event.target.value)} className="ml-2 h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
-              <option value="">All sources</option>
-              {data?.sources.map((item) => <option key={item}>{item}</option>)}
+            Existing list
+            <select
+              aria-label="Recipient list"
+              value={listId}
+              onChange={(event) => {
+                setListId(event.target.value);
+                void refreshLeads(event.target.value);
+              }}
+              className="ml-2 h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            >
+              {data?.lists.length ? null : <option value="">No lists yet</option>}
+              {data?.lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
             </select>
           </label>
+          <Button variant="secondary" size="sm" onClick={() => setImportOpen(!importOpen)}>
+            <Upload className="size-4" aria-hidden="true" /> Upload CSV
+          </Button>
         </div>
       </div>
+      {importOpen ? (
+        <div className="mt-4">
+          <CsvImportPanel
+            api={api}
+            lists={data?.lists ?? []}
+            defaultListId={listId || undefined}
+            onClose={() => setImportOpen(false)}
+            onImported={async (result: ImportLeadsResponse) => {
+              await refreshLeads(result.list.id);
+            }}
+          />
+        </div>
+      ) : null}
       {data && data.leads.some((lead) => lead.status !== "new") ? (
         <p className="mt-4 rounded-xl bg-secondary px-4 py-3 text-xs text-muted-foreground">
           {data.leads.filter((lead) => lead.status !== "new").length} contacted, queued, bounced, or suppressed leads are unavailable.
@@ -263,7 +407,7 @@ function RecipientsStep({ data, available, selected, source, setSource, toggleEm
             </span>
           </label>
         ))}
-        {data && available.length === 0 ? <p className="px-4 py-10 text-center text-sm text-muted-foreground">No new leads in this source.</p> : null}
+        {data && available.length === 0 ? <p className="px-4 py-10 text-center text-sm text-muted-foreground">No new leads in this list.</p> : null}
       </div>
     </div>
   );
@@ -275,10 +419,28 @@ function WriteStep({ name, subject, body, templates, setName, setSubject, setBod
   setName: (value: string) => void; setSubject: (value: string) => void; setBody: (value: string) => void;
   onSaveTemplate: () => void;
 }) {
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const activeField = useRef<"subject" | "body">("body");
+
+  function insertVariable(variable: "{firstName}" | "{company}") {
+    const fieldName = activeField.current;
+    const field = fieldName === "subject" ? subjectRef.current : bodyRef.current;
+    const value = fieldName === "subject" ? subject : body;
+    const start = field?.selectionStart ?? value.length;
+    const end = field?.selectionEnd ?? start;
+    const next = `${value.slice(0, start)}${variable}${value.slice(end)}`;
+    const caret = start + variable.length;
+    if (fieldName === "subject") setSubject(next); else setBody(next);
+    field?.focus();
+    window.requestAnimationFrame(() => {
+      field?.setSelectionRange(caret, caret);
+    });
+  }
+
   return (
     <div>
-      <p className="mt-1 text-sm text-muted-foreground">Plain text stays readable and avoids invisible tracking.</p>
-      <div className="mt-5 grid gap-4">
+      <div className="grid gap-4">
         {templates.length > 0 ? (
           <label className="text-xs font-medium text-muted-foreground">
             Saved template
@@ -300,12 +462,40 @@ function WriteStep({ name, subject, body, templates, setName, setSubject, setBod
           </label>
         ) : null}
         <TextField label="Campaign name" value={name} onChange={setName} placeholder="September beta note" />
-        <TextField label="Subject" value={subject} onChange={setSubject} placeholder="A short note for {company}" />
+        <label className="text-xs font-medium text-muted-foreground">
+          Subject
+          <input
+            ref={subjectRef}
+            aria-label="Subject"
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            onFocus={() => { activeField.current = "subject"; }}
+            placeholder="A short note for your company"
+            className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Personalization variables">
+          <span className="mr-1 text-xs font-medium text-muted-foreground">Insert variable</span>
+          <Button variant="secondary" size="xs" onClick={() => insertVariable("{firstName}")} aria-label="Insert {firstName}">
+            <code className="font-mono">{"{firstName}"}</code>
+          </Button>
+          <Button variant="secondary" size="xs" onClick={() => insertVariable("{company}")} aria-label="Insert {company}">
+            <code className="font-mono">{"{company}"}</code>
+          </Button>
+        </div>
         <label className="text-xs font-medium text-muted-foreground">
           Message
-          <textarea aria-label="Message" value={body} onChange={(event) => setBody(event.target.value)} rows={9} placeholder="Hi {firstName}," className="mt-1 w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm leading-6 text-foreground" />
+          <textarea
+            ref={bodyRef}
+            aria-label="Message"
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            onFocus={() => { activeField.current = "body"; }}
+            rows={9}
+            placeholder="Write your message"
+            className="mt-1 w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm leading-6 text-foreground"
+          />
         </label>
-        <p className="text-xs text-muted-foreground">Variables: <code className="font-mono">{"{firstName}"}</code> and <code className="font-mono">{"{company}"}</code>. Missing values use readable fallbacks.</p>
         <div><Button variant="secondary" size="sm" disabled={!name.trim() || !subject.trim() || !body.trim()} onClick={onSaveTemplate}>Save as template</Button></div>
       </div>
     </div>
@@ -319,8 +509,8 @@ function DeliveryStep({ accounts, selected, toggleAccount, dailyCap, delayMin, d
 }) {
   return (
     <div>
-      <p className="mt-1 text-sm text-muted-foreground">Account safeguards still cap the campaign if these values are higher.</p>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <p className="text-xs font-medium text-muted-foreground">Sender</p>
+      <div className="mt-2 grid gap-3 sm:grid-cols-2">
         {accounts.map((account) => (
           <label key={account.id} className="flex cursor-pointer gap-3 rounded-xl border border-border bg-background p-4 hover:bg-accent">
             <input type="checkbox" checked={selected.has(account.id)} onChange={() => toggleAccount(account)} className="mt-0.5 size-4 accent-primary" />

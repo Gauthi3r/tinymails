@@ -1,14 +1,45 @@
 import type { CreateCampaignInput, CreateCampaignResult } from "../domain/campaigns";
-import type { Account, Campaign, Lead, LeadStatus, Template } from "../domain/types";
+import type { Account, Campaign, ContactList, Lead, LeadStatus, Template } from "../domain/types";
 import type { MergeLeadsResult } from "../domain/leads";
 
 export type PublicAccount = Omit<Account, "credentialDirectory">;
 export type LeadView = Lead & { status: LeadStatus };
+export type ContactListSummary = ContactList & { contactCount: number };
+
+export interface LeadFilters {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+  listId?: string;
+  status?: LeadStatus | "";
+}
 
 export interface LeadsResponse {
   leads: LeadView[];
   counts: Record<string, number>;
-  sources: string[];
+  lists: ContactListSummary[];
+  pagination: { page: number; pageSize: number; total: number; pages: number };
+}
+
+export type ImportTarget = { listId: string } | { listName: string };
+export type ImportLeadsResponse = MergeLeadsResult & { list: ContactList };
+export type BulkLeadSelection =
+  | { mode: "emails"; emails: string[] }
+  | {
+      mode: "filter";
+      query?: string;
+      listId?: string;
+      status?: LeadStatus | "";
+      excludedEmails?: string[];
+    };
+export type BulkLeadOperation =
+  | { type: "add-to-list"; listId: string }
+  | { type: "remove-from-list"; listId: string }
+  | { type: "delete" };
+export interface BulkLeadResult {
+  affected: number;
+  skipped: number;
+  skippedEmails: string[];
 }
 
 export interface SettingsResponse {
@@ -25,7 +56,7 @@ export type GoogleOAuthStatus =
 
 export interface AppApi {
   getCampaigns(): Promise<Campaign[]>;
-  getLeads(): Promise<LeadsResponse>;
+  getLeads(filters?: LeadFilters): Promise<LeadsResponse>;
   getSettings(): Promise<SettingsResponse>;
   startGoogleOAuth(client: unknown): Promise<{ sessionId: string; authorizationUrl: string }>;
   getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
@@ -35,7 +66,8 @@ export interface AppApi {
     accountId: string,
     input: Pick<Account, "dailyCap" | "delayMinSeconds" | "delayMaxSeconds" | "timeZone" | "sendingWindow">,
   ): Promise<PublicAccount>;
-  importLeads(source: string, leads: Array<Pick<Lead, "email" | "firstName" | "company">>): Promise<MergeLeadsResult>;
+  importLeads(target: ImportTarget, leads: Array<Pick<Lead, "email" | "firstName" | "company">>): Promise<ImportLeadsResponse>;
+  bulkUpdateLeads(selection: BulkLeadSelection, operation: BulkLeadOperation): Promise<BulkLeadResult>;
   createCampaign(input: Omit<CreateCampaignInput, "now">): Promise<CreateCampaignResult>;
   testCampaign(campaignId: string): Promise<Campaign>;
   startCampaign(campaignId: string): Promise<Campaign>;
@@ -51,8 +83,15 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     async getCampaigns() {
       return (await getJson<{ campaigns: Campaign[] }>(fetcher, "/api/campaigns")).campaigns;
     },
-    async getLeads() {
-      return getJson<LeadsResponse>(fetcher, "/api/leads");
+    async getLeads(filters = {}) {
+      const query = new URLSearchParams();
+      if (filters.page) query.set("page", String(filters.page));
+      if (filters.pageSize) query.set("pageSize", String(filters.pageSize));
+      if (filters.query) query.set("query", filters.query);
+      if (filters.listId) query.set("listId", filters.listId);
+      if (filters.status) query.set("status", filters.status);
+      const suffix = query.size > 0 ? `?${query}` : "";
+      return getJson<LeadsResponse>(fetcher, `/api/leads${suffix}`);
     },
     async getSettings() {
       return getJson<SettingsResponse>(fetcher, "/api/settings");
@@ -76,8 +115,11 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
         input,
       )).account;
     },
-    async importLeads(source, leads) {
-      return sendJson(fetcher, "/api/leads/import", { source, leads });
+    async importLeads(target, leads) {
+      return sendJson(fetcher, "/api/leads/import", { target, leads });
+    },
+    async bulkUpdateLeads(selection, operation) {
+      return sendJson(fetcher, "/api/leads/bulk", { selection, operation });
     },
     async createCampaign(input) {
       return sendJson(fetcher, "/api/campaigns", input);
