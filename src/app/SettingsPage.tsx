@@ -230,7 +230,7 @@ export function SettingsPage({
                     <span>{account.label}</span>
                     <span className="text-xs text-muted-foreground">{account.email}</span>
                     <span className="text-xs text-muted-foreground">
-                      {account.sendingWindow.start}–{account.sendingWindow.end} · {account.timeZone}
+                      {formatSendingDays(account.sendingWindow.days)} · {account.sendingWindow.start}–{account.sendingWindow.end} · {account.timeZone}
                     </span>
                   </span>
                 }
@@ -343,6 +343,23 @@ const weekdays = [
   { value: 0, label: "Sun" },
 ] as const;
 
+function formatSendingDays(days: number[]): string {
+  const active = weekdays
+    .map((day, index) => ({ ...day, index }))
+    .filter((day) => days.includes(day.value));
+  if (active.length === 7) return "Every day";
+  if (active.length === 0) return "No sending days";
+  const parts: string[] = [];
+  let runStart = 0;
+  for (let position = 1; position <= active.length; position += 1) {
+    if (position < active.length && active[position].index === active[position - 1].index + 1) continue;
+    const run = active.slice(runStart, position);
+    parts.push(run.length >= 3 ? `${run[0].label}–${run[run.length - 1].label}` : run.map((day) => day.label).join(", "));
+    runStart = position;
+  }
+  return parts.join(", ");
+}
+
 function AccountRulesForm({
   account,
   api,
@@ -363,6 +380,10 @@ function AccountRulesForm({
   const [end, setEnd] = useState(account.sendingWindow.end);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const timeZones = useMemo(() => {
+    const supported = Intl.supportedValuesOf("timeZone");
+    return supported.includes(account.timeZone) ? supported : [account.timeZone, ...supported];
+  }, [account.timeZone]);
 
   async function save() {
     setSaving(true);
@@ -390,7 +411,9 @@ function AccountRulesForm({
         <RuleNumber label="Account daily cap" value={dailyCap} min={1} max={500} onChange={setDailyCap} />
         <label className="text-xs font-medium text-muted-foreground">
           Time zone
-          <input aria-label="Account time zone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
+          <select aria-label="Account time zone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground">
+            {timeZones.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+          </select>
         </label>
         <RuleNumber label="Minimum delay" value={delayMinSeconds} min={0} max={3600} onChange={setDelayMinSeconds} />
         <RuleNumber label="Maximum delay" value={delayMaxSeconds} min={0} max={3600} onChange={setDelayMaxSeconds} />

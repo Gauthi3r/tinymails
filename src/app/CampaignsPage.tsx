@@ -102,8 +102,9 @@ export function CampaignsPage({ api }: { api: AppApi }) {
           initialDraft={draft}
           onCancel={() => setComposing(false)}
           onDraftChange={setDraft}
+          onSaved={(campaign) => setCampaigns((current) => upsertCampaign(current, campaign))}
           onCreated={(campaign) => {
-            setCampaigns((current) => [campaign, ...(current ?? [])]);
+            setCampaigns((current) => upsertCampaign(current, campaign));
             setDraft(null);
             setComposing(false);
           }}
@@ -199,6 +200,13 @@ export function CampaignsPage({ api }: { api: AppApi }) {
       ) : null}
     </PageFrame>
   );
+}
+
+function upsertCampaign(current: Campaign[] | null, campaign: Campaign): Campaign[] {
+  const records = current ?? [];
+  return records.some((record) => record.id === campaign.id)
+    ? records.map((record) => (record.id === campaign.id ? campaign : record))
+    : [campaign, ...records];
 }
 
 function DraftRow({ draft, onResume, onDiscard }: {

@@ -30,7 +30,7 @@ describe("campaign composer", () => {
     expect(screen.queryByRole("region", { name: "Empty campaigns" })).not.toBeInTheDocument();
   });
 
-  it("reviews personalized copy before saving a paused campaign", async () => {
+  it("reviews personalized copy, sends the test, then starts the campaign", async () => {
     const api = fakeApi();
     render(<CampaignsPage api={api} />);
 
@@ -60,7 +60,8 @@ describe("campaign composer", () => {
 
     expect(screen.getByText("2 recipients")).toBeVisible();
     expect(screen.getByText("Hi Ada, a careful update.")).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Save campaign" }));
+    expect(screen.getByRole("button", { name: "Start campaign" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Send test email" }));
 
     expect(api.createCampaign).toHaveBeenCalledWith(expect.objectContaining({
       name: "Beta note",
@@ -72,9 +73,19 @@ describe("campaign composer", () => {
         expect.objectContaining({ email: "grace@example.org" }),
       ],
     }));
+    expect(api.testCampaign).toHaveBeenCalledWith("campaign-1");
     expect(api.startCampaign).not.toHaveBeenCalled();
-    expect(await screen.findByText("Beta note")).toBeVisible();
+    expect(await screen.findByText(/Test sent to sender@example.com/)).toBeVisible();
     expect(window.localStorage.length).toBe(0);
+    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+
+    const startButton = screen.getByRole("button", { name: "Start campaign" });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await userEvent.click(startButton);
+
+    expect(api.startCampaign).toHaveBeenCalledWith("campaign-1");
+    expect(await screen.findByText("Beta note")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause Beta note" })).toBeVisible();
   });
 
   it("opens the existing reviewed CSV import from the recipients step", async () => {
@@ -183,11 +194,14 @@ describe("campaign composer", () => {
     await userEvent.type(screen.getByLabelText("Message"), "Hi there");
     await userEvent.click(screen.getByRole("button", { name: "Continue to Delivery" }));
     await userEvent.click(screen.getByRole("button", { name: "Continue to Review" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save campaign" }));
+    await userEvent.click(screen.getByRole("button", { name: "Send test email" }));
 
     expect(await screen.findByText(/1 recipient was excluded by the final safety checks/)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Review" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "View saved campaign" }));
+    const startButton = screen.getByRole("button", { name: "Start campaign" });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await userEvent.click(startButton);
+    expect(api.startCampaign).toHaveBeenCalledWith("campaign-1");
     expect(await screen.findByText("Beta note")).toBeVisible();
   });
 

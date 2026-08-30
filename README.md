@@ -54,7 +54,7 @@ TinyMails does not ship a shared OAuth client. Each user creates one in a Google
 3. Enable the [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
 4. Open [Clients](https://console.cloud.google.com/auth/clients), create an OAuth client with application type **Desktop app**, and download its JSON file.
 5. Start TinyMails, open **Settings**, choose that JSON file, and finish consent in the Google window.
-6. Create and save a campaign, then use **Send test** on its row. TinyMails sends the personalized preview to each assigned Gmail address; **Start** appears only after every preview succeeds.
+6. Create a campaign and use **Send test** on its review step. TinyMails sends the personalized preview to each assigned Gmail address. **Start** unlocks once every preview succeeds, and pressing it begins sending immediately.
 
 Google can show an unverified-app notice for a personal Testing configuration. Testing-mode authorization for an External app may also expire after seven days, requiring a reconnect. Publishing and verifying a shared OAuth app is a separate distribution step; bring-your-own OAuth does not bypass Google's consent or user rules.
 

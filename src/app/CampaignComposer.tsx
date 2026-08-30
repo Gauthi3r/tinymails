@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Mail, Send, Upload, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Play, Send, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
@@ -16,12 +16,14 @@ export function CampaignComposer({
   initialDraft,
   onCancel,
   onCreated,
+  onSaved,
   onDraftChange,
 }: {
   api: AppApi;
   initialDraft: CampaignDraft | null;
   onCancel: () => void;
   onCreated: (campaign: Campaign) => void;
+  onSaved: (campaign: Campaign) => void;
   onDraftChange: (draft: CampaignDraft | null) => void;
 }) {
   const [leads, setLeads] = useState<LeadsResponse | null>(null);
@@ -40,7 +42,8 @@ export function CampaignComposer({
   const [delayMax, setDelayMax] = useState(initialDraft?.delayMax ?? 45);
   const [importOpen, setImportOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [savedCampaign, setSavedCampaign] = useState<Campaign | null>(null);
   const shouldDefaultAccount = useRef(initialDraft === null);
@@ -158,33 +161,58 @@ export function CampaignComposer({
     onDraftChange(null);
   }
 
-  async function save() {
-    setSaving(true);
+  async function ensureSaved(): Promise<Campaign> {
+    if (savedCampaign) return savedCampaign;
+    const result = await api.createCampaign({
+      name: name.trim(),
+      subject,
+      body,
+      accountIds: [...selectedAccounts],
+      dailyCap,
+      delayMinSeconds: delayMin,
+      delayMaxSeconds: delayMax,
+      recipients: selected.map(({ email, firstName, company }) => ({ email, firstName, company })),
+    });
+    finishDraft();
+    setSavedCampaign(result.campaign);
+    onSaved(result.campaign);
+    if (result.excluded.length > 0) {
+      setMessage(
+        `${result.excluded.length} recipient${result.excluded.length === 1 ? " was" : "s were"} excluded by the final safety checks. The campaign has ${result.campaign.recipients.length} recipient${result.campaign.recipients.length === 1 ? "" : "s"}.`,
+      );
+    }
+    return result.campaign;
+  }
+
+  async function sendPreview() {
+    setTesting(true);
     setMessage(null);
     try {
-      const result = await api.createCampaign({
-        name: name.trim(),
-        subject,
-        body,
-        accountIds: [...selectedAccounts],
-        dailyCap,
-        delayMinSeconds: delayMin,
-        delayMaxSeconds: delayMax,
-        recipients: selected.map(({ email, firstName, company }) => ({ email, firstName, company })),
-      });
-      finishDraft();
-      if (result.excluded.length > 0) {
-        setSavedCampaign(result.campaign);
-        setMessage(
-          `${result.excluded.length} recipient${result.excluded.length === 1 ? " was" : "s were"} excluded by the final safety checks. The paused campaign has ${result.campaign.recipients.length} recipient${result.campaign.recipients.length === 1 ? "" : "s"}.`,
-        );
-      } else {
-        onCreated(result.campaign);
-      }
+      const campaign = await ensureSaved();
+      const tested = await api.testCampaign(campaign.id);
+      setSavedCampaign(tested);
+      onSaved(tested);
+      const inboxes = selectedAccountRecords.map((account) => account.email).join(", ") || "your Gmail inbox";
+      const confirmation = `Test sent to ${inboxes}. Check that inbox, then press Start.`;
+      setMessage((current) => (current ? `${current} ${confirmation}` : confirmation));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The campaign could not be saved.");
+      setMessage(error instanceof Error ? error.message : "The test email could not be sent.");
     } finally {
-      setSaving(false);
+      setTesting(false);
+    }
+  }
+
+  async function start() {
+    if (!savedCampaign) return;
+    setStarting(true);
+    setMessage(null);
+    try {
+      const running = await api.startCampaign(savedCampaign.id);
+      onCreated(running);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The campaign could not be started.");
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -220,8 +248,8 @@ export function CampaignComposer({
           <button
             key={label}
             type="button"
-            onClick={() => { if (index < step) setStep(index as 0 | 1 | 2 | 3); }}
-            disabled={index > step}
+            onClick={() => { if (index < step && !savedCampaign) setStep(index as 0 | 1 | 2 | 3); }}
+            disabled={index > step || (index < step && Boolean(savedCampaign))}
             className="flex min-h-12 items-center justify-center gap-1.5 border-b-2 border-transparent px-1 text-xs font-medium text-muted-foreground disabled:opacity-45 data-[active=true]:border-primary data-[active=true]:text-foreground sm:text-sm"
             data-active={index === step}
           >
@@ -301,14 +329,15 @@ export function CampaignComposer({
           <Button disabled={!canContinue} onClick={() => setStep((current) => Math.min(3, current + 1) as 0 | 1 | 2 | 3)} aria-label={`Continue to ${steps[step + 1]}`}>
             Continue <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
-        ) : savedCampaign ? (
-          <Button onClick={() => onCreated(savedCampaign)} aria-label="View saved campaign">
-            <Mail className="size-4" aria-hidden="true" /> View saved campaign
-          </Button>
         ) : (
-          <Button loading={saving} onClick={() => void save()} aria-label="Save campaign">
-            <Mail className="size-4" aria-hidden="true" /> Save campaign
-          </Button>
+          <span className="flex items-center gap-2">
+            <Button variant="secondary" loading={testing} disabled={starting} onClick={() => void sendPreview()} aria-label="Send test email">
+              <Send className="size-4" aria-hidden="true" /> {savedCampaign?.testedAt ? "Send test again" : "Send test"}
+            </Button>
+            <Button loading={starting} disabled={!savedCampaign?.testedAt || testing} onClick={() => void start()} aria-label="Start campaign">
+              <Play className="size-4" aria-hidden="true" /> Start
+            </Button>
+          </span>
         )}
       </div>
     </SquircleSurface>
@@ -516,7 +545,7 @@ function DeliveryStep({ accounts, selected, toggleAccount, dailyCap, delayMin, d
             <input type="checkbox" checked={selected.has(account.id)} onChange={() => toggleAccount(account)} className="mt-0.5 size-4 accent-primary" />
             <span>
               <span className="block text-sm font-medium">{account.email}</span>
-              <span className="mt-1 block text-xs text-muted-foreground">{account.lastTestedAt ? "Test send confirmed" : "Test send required before start"} · {account.dailyCap}/day</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{account.lastTestedAt ? "Test send confirmed" : "Test send comes at the review step"} · {account.dailyCap}/day</span>
             </span>
           </label>
         ))}
@@ -538,7 +567,7 @@ function ReviewStep({ recipients, accounts, subject, body, dailyCap, delayMin, d
   const sample = recipients[0];
   return (
     <div>
-      <p className="mt-1 text-sm text-muted-foreground">Saving creates a paused campaign. Gmail sends nothing until you press Start.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Send the test to your own inbox first. Start unlocks after the test and begins sending immediately.</p>
       <div className="mt-5 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-3 rounded-xl border border-border bg-background p-4 text-sm">
           <ReviewRow label="Recipients" value={`${recipients.length} recipients`} />

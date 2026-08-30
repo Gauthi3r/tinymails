@@ -105,6 +105,7 @@ describe("Gmail setup", () => {
       />,
     );
 
+    expect(screen.getByText("Mon–Fri · 09:00–17:00 · Europe/Lisbon")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Edit sending rules" }));
     fireEvent.change(screen.getByLabelText("Account daily cap"), { target: { value: "40" } });
     fireEvent.change(screen.getByLabelText("Sending starts"), { target: { value: "22:00" } });
