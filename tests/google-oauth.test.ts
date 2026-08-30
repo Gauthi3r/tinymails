@@ -14,6 +14,7 @@ import {
   type GoogleOAuthProvider,
 } from "../src/gmail/google-oauth";
 import { createRepositories, type Repositories } from "../src/server/repositories";
+import { honorsPosixModes } from "./platform";
 
 const startedAt = new Date("2026-08-29T10:00:00.000Z");
 
@@ -102,7 +103,9 @@ describe("Google OAuth sessions", () => {
       clientId: "123456789.apps.googleusercontent.com",
       projectId: "tinymails-example",
     });
-    expect((await stat(clientPath)).mode & 0o777).toBe(0o600);
+    if (honorsPosixModes) {
+      expect((await stat(clientPath)).mode & 0o777).toBe(0o600);
+    }
     expect(service.status(started.sessionId)).toEqual({
       status: "connected",
       account: expect.objectContaining({ id: "account-1", email: "sender@example.com" }),
