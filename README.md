@@ -4,6 +4,8 @@ TinyMails is a local-first Gmail mail merge for small, permission-based campaign
 
 This repository contains the source-first v0.1 release candidate. It includes the OA-based interface, bring-your-own Google OAuth, reviewed CSV imports, reusable templates, a four-step campaign composer, Gmail delivery safeguards, local backups, and a one-command launcher.
 
+<img width="1050" height="429" alt="TinyMails" src="https://github.com/user-attachments/assets/ff07deed-7845-49c6-bde8-e017a8110d15" />
+
 ## What it does
 
 - Imports and enriches contacts without overwriting known values.
