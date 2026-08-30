@@ -1,6 +1,10 @@
+import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const skippedDirectories = new Set([".git", "node_modules", "dist", "coverage"]);
 const credentialNames = new Set([
@@ -38,6 +42,21 @@ function publicPath(root, path) {
   return relative(root, path).split(sep).join("/");
 }
 
+// Paths git ignores or excludes cannot be staged without --force, so they are
+// not part of the public tree. Outside a git checkout nothing is skipped.
+async function gitIgnoredPaths(root) {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", root, "ls-files", "--others", "--ignored", "--exclude-standard"],
+      { maxBuffer: 16 * 1024 * 1024 },
+    );
+    return new Set(stdout.split("\n").filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
 function inspectText(contents, path, privateTerms) {
   const findings = [];
 
@@ -62,6 +81,7 @@ function inspectText(contents, path, privateTerms) {
 
 export async function scanTree(root, { privateTerms = /** @type {string[]} */ ([]) } = {}) {
   const findings = [];
+  const ignored = await gitIgnoredPaths(root);
 
   async function walk(directory) {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -76,6 +96,7 @@ export async function scanTree(root, { privateTerms = /** @type {string[]} */ ([
         await walk(path);
         continue;
       }
+      if (ignored.has(displayPath)) continue;
 
       if (credentialNames.has(entry.name.toLowerCase())) {
         findings.push({ rule: "credential-file", path: displayPath });
