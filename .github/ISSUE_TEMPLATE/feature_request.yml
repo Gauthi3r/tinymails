@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a change to how TinyMails works.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        TinyMails deliberately leaves out tracking pixels, AI-written copy,
+        automated follow-ups, inbox reading, and reply detection. Requests for
+        those are likely to be declined, so explain the underlying need rather
+        than the feature name.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The task you cannot finish today, not the feature you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like TinyMails to do
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Does this change stored data or Gmail permissions
+      description: Say so if it touches the data directory format or the OAuth scopes.

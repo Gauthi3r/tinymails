@@ -2,9 +2,9 @@
 
 TinyMails is a local-first Gmail mail merge for small, permission-based campaigns. It keeps contacts, templates, sending history, and account configuration on your computer.
 
-This repository contains the source-first v0.1 release candidate. It includes the OA-based interface, bring-your-own Google OAuth, reviewed CSV imports, reusable templates, a four-step campaign composer, Gmail delivery safeguards, local backups, and a one-command launcher.
+Version 0.1 is the first release. You run it from source: clone, `npm install`, `npm start`. It covers bring-your-own Google OAuth, reviewed CSV imports, reusable templates, a four-step campaign composer, Gmail delivery safeguards, local backups, and a one-command launcher.
 
-<img width="1050" height="429" alt="TinyMails" src="https://github.com/user-attachments/assets/ff07deed-7845-49c6-bde8-e017a8110d15" />
+<img width="1050" height="429" alt="The TinyMails campaigns page, showing a paused campaign at 0 of 56 sent with a 30 per day cap, next to Send test and Stop controls" src="https://github.com/user-attachments/assets/ff07deed-7845-49c6-bde8-e017a8110d15" />
 
 ## What it does
 
@@ -110,7 +110,7 @@ Only contact people who expect to hear from you. Keep lists small, honor removal
 
 ## Roadmap
 
-The next useful additions are campaign cloning, lead editing, list renaming, backup restore, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The [v0.1 design record](docs/superpowers/specs/2026-08-29-tinymails-v0.1-design.md) records the product and safety decisions behind this release.
+The next useful additions are campaign cloning, lead editing, list renaming, backup restore, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The [v0.1 design record](docs/design/decisions/2026-08-29-tinymails-v0.1-design.md) records the product and safety decisions behind this release.
 
 ## License
 

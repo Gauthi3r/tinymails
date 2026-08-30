@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in TinyMails behaves differently than documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste credentials or real contact data.**
+
+        Leave out OAuth client JSON, access and refresh tokens, `client.json`,
+        contents of your data directory, campaign exports, and anyone's real
+        email address. Replace real addresses with `person@example.com` before
+        you attach logs or screenshots.
+
+        For a security vulnerability, use
+        [private vulnerability reporting](https://github.com/Gauthi3r/tinymails/security/advisories/new)
+        instead of this form.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what TinyMails did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Import examples/contacts.csv
+        2. Create a campaign
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: TinyMails version or commit
+      placeholder: v0.1.0, or the output of `git rev-parse --short HEAD`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Windows, Linux]
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: Output of `node --version`
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Terminal output or browser console errors, with private data removed.
+      render: shell
+  - type: checkboxes
+    id: scrubbed
+    attributes:
+      label: Before you submit
+      options:
+        - label: This report contains no credentials, tokens, or real email addresses.
+          required: true
