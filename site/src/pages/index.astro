@@ -1,0 +1,400 @@
+---
+import manropeUrl from "@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url";
+import monoUrl from "@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2?url";
+import Mark from "../components/Mark.astro";
+import promptText from "../content/agent-prompt.txt?raw";
+import { userRequest } from "../sim/demo-data";
+import { rulesLine } from "../sim/format";
+import { planRun } from "../sim/plan";
+import { stripHtml, stripModel } from "../sim/strip";
+import { WEEKDAYS, WEEK_ORDER, dayAndTime } from "../sim/time";
+import { DEFAULT_RULES, DemoWorld } from "../sim/world";
+import "../styles/site.css";
+
+// Everything below is computed by running TinyMails' own code at build time,
+// so the page reads correctly before (and without) its script.
+const world = new DemoWorld();
+const { imported, created } = world;
+const campaign = created.campaign;
+const preview = world.preview();
+const plan = await planRun(DEFAULT_RULES);
+const strip = stripHtml(stripModel(plan, DEFAULT_RULES));
+const queued = campaign.recipients.length;
+
+const title = "TinyMails - A Gmail outbox for your agent";
+const description =
+  "TinyMails is a local, open-source Gmail sending tool: your agent queues a small campaign on your computer, and you read the test and press Start.";
+const origin = "https://tinymails.com";
+const github = "https://github.com/Gauthi3r/tinymails";
+
+const hours = Array.from({ length: 17 }, (_, index) => `${String(index + 6).padStart(2, "0")}:00`);
+const delays = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600];
+
+const json = (value: unknown) => JSON.stringify(value);
+const count = (value: number, word: string) => `${value} ${word}`;
+const importLine = [
+  count(imported.added, "added"),
+  count(imported.duplicate, "duplicate"),
+  ...(imported.invalid ? [count(imported.invalid, "invalid")] : []),
+].join(", ");
+const queueLine = `${queued} queued, ${created.excluded.length} excluded`;
+const agentResponse = `{\n  "campaign": {\n    "id": "…",\n    "status": ${json(campaign.status)},\n    "recipients": [ … ${queued} … ]\n  },\n  "excluded": [\n${created.excluded
+  .map((item) => `    { "email": ${json(item.email)},\n      "reason": ${json(item.reason)} }`)
+  .join(",\n")}\n  ]\n}`;
+
+// The prompt, as paragraphs. The request lines in step 4 read as code.
+const isCode = (line: string) => /^(POST |GET |Content-Type:|\{)/.test(line);
+const promptBlocks = promptText
+  .trim()
+  .split(/\n\s*\n/)
+  .map((block) => {
+    const parts: Array<{ code: boolean; text: string }> = [];
+    for (const line of block.split("\n")) {
+      const code = isCode(line);
+      const last = parts[parts.length - 1];
+      if (last && last.code === code) last.text += `\n${line}`;
+      else parts.push({ code, text: line });
+    }
+    return parts;
+  });
+
+// Display only (the copy button copies the file's own text): commands read as
+// code, and long addresses may break after a slash, never inside a word.
+const escapeHtml = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const breakable = (html: string) =>
+  html.replace(/(https?:\/\/)([^\s<]+)/g, (_, scheme: string, rest: string) => scheme + rest.replace(/\//g, "/<wbr>"));
+const proseHtml = (text: string) =>
+  breakable(
+    escapeHtml(text)
+      .replace(/curl -s (http[^\s<]+)/g, '<code class="cmd"><span class="nowrap">curl -s</span> $1</code>')
+      .replace(/(\/test-send|\/start)\b/g, '<code class="cmd nowrap">$1</code>')
+      .replace(/do-not-contact/g, '<span class="nowrap">do-not-contact</span>'),
+  );
+const codeHtml = (text: string) => breakable(escapeHtml(text));
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={`${origin}/`} />
+    <meta name="theme-color" content="#2463EB" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TinyMails" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={`${origin}/`} />
+    <meta property="og:image" content={`${origin}/og.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TinyMails: A Gmail outbox for your agent. A cobalt envelope beside forty tiny envelopes." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={`${origin}/og.png`} />
+    <link rel="preload" href={manropeUrl} as="font" type="font/woff2" crossorigin />
+    <style set:html={`
+      @font-face { font-family: "Manrope"; font-style: normal; font-display: swap; font-weight: 200 800; src: url(${manropeUrl}) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      @font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 400; src: url(${monoUrl}) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F, U+2212; } /* taste-skill-ignore: face for code and the terminal only */
+    `} />
+    <script is:inline>document.documentElement.classList.add("js");</script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav">
+      <a class="brand" href="/" aria-label="TinyMails, home">
+        <Mark class="brand-mark" />
+        <span>TinyMails</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#rules">Rules</a>
+        <a href="#agents">Agents</a>
+        <a href="#limits">Limits</a>
+        <a href={github}>GitHub</a>
+      </nav>
+      <a class="button button-primary nav-copy" href="#prompt" data-copy>Copy the agent prompt</a>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-head wrap">
+          <h1 id="hero-title" class="display hero-title">
+            <span class="line"><span>A Gmail outbox</span></span>
+            <span class="line"><span>for your agent.</span></span>
+          </h1>
+          <div class="hero-aside">
+            <p class="hero-sentence">Your agent queues the campaign on your computer. You read the test, press Start, and TinyMails sends it through your own Gmail, 25 a day by default.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#prompt" data-copy>Copy the agent prompt</a>
+              <a class="button button-quiet" href={github}>Read the source on GitHub</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage wrap" id="demo">
+          <div class="stage-agent" data-ui aria-label="The agent's terminal" role="region">
+            <pre class="term"><code class="term-body">
+              <span class="term-line term-you"><span class="term-sign" aria-hidden="true">&gt;</span><span>{userRequest}</span></span>
+              <span class="term-line term-grid">
+                <span class="term-req"><span class="term-verb">POST</span> /api/leads/import</span><span class="term-ok">200</span>
+                <span class="term-out term-wide">{importLine}</span>
+              </span>
+              <span class="term-line term-grid">
+                <span class="term-req"><span class="term-verb">POST</span> /api/campaigns</span><span class="term-ok">201</span>
+                <span class="term-out term-wide">{campaign.status}</span>
+                <span class="term-out term-wide">{queueLine}</span>
+              </span>
+              <span class="term-line term-grid term-excluded">
+                {created.excluded.map((item) => (
+                  <Fragment><span class="term-out">{item.email}</span><span class="term-dim">{item.reason}</span></Fragment>
+                ))}
+              </span>
+              <span class="term-line term-done">Queued and paused. The test and the Start button are yours.</span>
+            </code></pre>
+          </div>
+
+          <div class="stage-post" data-ui>
+            <div class="post" data-post>
+              <article class="letter" data-letter aria-label="The test message">
+                <p class="letter-to"><span data-letter-label>Test to</span> <span data-letter-to>{preview.to}</span></p>
+                <p class="letter-subject" data-letter-subject>{preview.subject}</p>
+                <p class="letter-body" data-letter-body>{preview.body}</p>
+              </article>
+              <div class="envelope" aria-hidden="true">
+                <span class="envelope-flap"></span>
+                <span class="envelope-back"></span>
+                <span class="envelope-front"></span>
+              </div>
+            </div>
+            <div class="controls">
+              <button class="button button-primary" type="button" data-action="test" disabled>Send test</button>
+              <button class="button button-ink" type="button" data-action="start" aria-disabled="true" disabled>Start</button>
+            </div>
+            <p class="status" data-status role="status" aria-live="polite">Start unlocks after the test.</p>
+          </div>
+
+          <div class="stage-queue" data-ui>
+            <div class="queue-count">
+              <p class="lead"><span class="count-figure" data-sent>0</span> of {queued} sent</p>
+              <p class="queue-clock" data-clock>{dayAndTime(world.now)}</p>
+            </div>
+            <ol class="queue" aria-label={`${queued} queued messages`} data-queue>
+              {campaign.recipients.map((recipient) => (
+                <li class="mail" aria-label={recipient.email}>
+                  <svg viewBox="0 0 40 30" aria-hidden="true"><use href="#tiny-envelope" /></svg>
+                </li>
+              ))}
+            </ol>
+            <p class="queue-rules small" data-rules-line>{rulesLine(DEFAULT_RULES)}</p>
+            <p class="stage-note small">This is TinyMails' real queue code running in your browser, with a fake Gmail and a fast clock. Nothing is sent.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="rules" id="rules" aria-labelledby="rules-title">
+        <div class="wrap">
+          <div class="rules-head">
+            <h2 id="rules-title" class="heading rise">The sending rules are yours.</h2>
+            <p class="rules-intro rise">A daily cap, a sending window and a pause between messages, set for each Gmail account. Change them and the same queue replans.</p>
+          </div>
+
+          <form class="rules-form" data-rules aria-label="Sending rules" onsubmit="return false">
+            <fieldset class="rule rule-cap rise">
+              <legend class="rule-label">Daily cap</legend>
+              <div class="rule-figures">
+                <span class="field">
+                  <input class="figure figure-number" type="number" name="dailyCap" min="1" max="500" step="1" inputmode="numeric" value={DEFAULT_RULES.dailyCap} aria-label="Messages a day" style="--digits: 2" disabled />
+                  <span class="stepper">
+                    <button class="step" type="button" data-for="dailyCap" data-step="-1" aria-label="Lower the daily cap" disabled>&minus;</button>
+                    <button class="step" type="button" data-for="dailyCap" data-step="1" aria-label="Raise the daily cap" disabled>+</button>
+                  </span>
+                </span>
+                <span class="figure-unit">a day</span>
+              </div>
+            </fieldset>
+
+            <fieldset class="rule rule-window rise">
+              <legend class="rule-label">Sending window</legend>
+              <div class="rule-figures">
+                <span class="field">
+                  <select class="figure" name="start" aria-label="Opens at" disabled>
+                    {hours.slice(0, -1).map((hour) => <option value={hour} selected={hour === DEFAULT_RULES.start}>{hour}</option>)}
+                  </select>
+                  <span class="stepper">
+                    <button class="step" type="button" data-for="start" data-step="-1" aria-label="Open an hour earlier" disabled>&minus;</button>
+                    <button class="step" type="button" data-for="start" data-step="1" aria-label="Open an hour later" disabled>+</button>
+                  </span>
+                </span>
+                <span class="figure-unit">to</span>
+                <span class="field">
+                  <select class="figure" name="end" aria-label="Closes at" disabled>
+                    {hours.slice(1).map((hour) => <option value={hour} selected={hour === DEFAULT_RULES.end}>{hour}</option>)}
+                  </select>
+                  <span class="stepper">
+                    <button class="step" type="button" data-for="end" data-step="-1" aria-label="Close an hour earlier" disabled>&minus;</button>
+                    <button class="step" type="button" data-for="end" data-step="1" aria-label="Close an hour later" disabled>+</button>
+                  </span>
+                </span>
+              </div>
+              <div class="weekdays" role="group" aria-label="Sending days">
+                {WEEK_ORDER.map((weekday) => (
+                  <button type="button" class="weekday" data-weekday={weekday} aria-pressed={DEFAULT_RULES.days.includes(weekday) ? "true" : "false"} disabled>
+                    <span aria-hidden="true">{WEEKDAYS[weekday].slice(0, 3)}</span>
+                    <span class="visually-hidden">{WEEKDAYS[weekday]}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset class="rule rule-delay rise">
+              <legend class="rule-label">Between messages</legend>
+              <div class="rule-figures">
+                <span class="field">
+                  <select class="figure" name="delayMinSeconds" aria-label="At least, in seconds" disabled>
+                    {delays.map((value) => <option value={value} selected={value === DEFAULT_RULES.delayMinSeconds}>{value}</option>)}
+                  </select>
+                  <span class="stepper">
+                    <button class="step" type="button" data-for="delayMinSeconds" data-step="-1" aria-label="Shorten the shortest pause" disabled>&minus;</button>
+                    <button class="step" type="button" data-for="delayMinSeconds" data-step="1" aria-label="Lengthen the shortest pause" disabled>+</button>
+                  </span>
+                </span>
+                <span class="figure-unit">to</span>
+                <span class="field">
+                  <select class="figure" name="delayMaxSeconds" aria-label="At most, in seconds" disabled>
+                    {delays.map((value) => <option value={value} selected={value === DEFAULT_RULES.delayMaxSeconds}>{value}</option>)}
+                  </select>
+                  <span class="stepper">
+                    <button class="step" type="button" data-for="delayMaxSeconds" data-step="-1" aria-label="Shorten the longest pause" disabled>&minus;</button>
+                    <button class="step" type="button" data-for="delayMaxSeconds" data-step="1" aria-label="Lengthen the longest pause" disabled>+</button>
+                  </span>
+                </span>
+                <span class="figure-unit">seconds</span>
+              </div>
+            </fieldset>
+          </form>
+
+          <div class="plan">
+            <div class="plan-words rise" aria-live="polite">
+              <p class="lead plan-sentence" data-plan-sentence>{plan.sentence}</p>
+              <p class="plan-note" data-plan-note hidden={!plan.note}>{plan.note ?? ""}</p>
+              <p class="plan-after">At the cap, or when the window closes, TinyMails pauses and says why. It does not start again on its own.</p>
+            </div>
+            <div class="plan-strip rise" data-strip set:html={strip} />
+          </div>
+        </div>
+      </section>
+
+      <section class="agents" id="agents" aria-labelledby="agents-title">
+        <div class="wrap">
+          <div class="agents-head">
+            <h2 id="agents-title" class="heading rise"><span class="line-block">Your agent queues.</span> <span class="line-block">You press Start.</span></h2>
+            <p class="rise">TinyMails serves a small HTTP API on 127.0.0.1:3210, the same one its own screens use. An agent that can run commands on your computer can call it, and a new campaign is always created paused.</p>
+          </div>
+
+          <div class="prompt rise" id="prompt" tabindex="-1" data-prompt={promptText.trim()}>
+            <div class="prompt-bar">
+              <h3 class="prompt-title">The agent prompt</h3>
+              <a class="button button-primary" href="#prompt" data-copy>Copy the agent prompt</a>
+            </div>
+            <div class="prompt-text" data-prompt-text>
+              {promptBlocks.map((parts) => (
+                <p>{parts.map((part) => (part.code ? <code set:html={codeHtml(part.text)} /> : <span set:html={proseHtml(part.text)} />))}</p>
+              ))}
+            </div>
+          </div>
+
+          <div class="agents-body">
+            <div class="code agents-code rise" data-ui>
+              <pre><code><span class="code-dim">$</span> curl -s http://127.0.0.1:3210/<wbr />api/health
+{`{"ok":true,"product":"TinyMails",\n "version":"0.1.0"}`}
+
+<span class="code-dim">$</span> curl -s -X POST \
+    http://127.0.0.1:3210/<wbr />api/campaigns \
+    -H 'Content-Type: application/json' \
+    -d @design-partners.json
+{agentResponse}</code></pre>
+            </div>
+
+            <div class="agents-side">
+              <ul class="notes">
+                <li class="rise">Works with agents that can run commands on your computer.</li>
+                <li class="rise">Agents that run in the cloud cannot reach 127.0.0.1.</li>
+                <li class="rise">There is no MCP server yet.</li>
+                <li class="rise">TinyMails has no separate agent permission yet. The prompt tells your agent to stop once the campaign is queued.</li>
+              </ul>
+              <a class="text-link rise" href="/agent-guide.md">Read the agent guide</a>
+
+              <div class="install rise">
+                <div class="code install-code" data-ui>
+                  <pre><code><span class="code-dim">$</span> git clone \
+  https://github.com/<wbr />Gauthi3r/<wbr />tinymails.git
+<span class="code-dim">$</span> cd tinymails
+<span class="code-dim">$</span> npm install
+<span class="code-dim">$</span> npm start</code></pre>
+                </div>
+                <p>Needs Node.js 22 or newer and a Google OAuth client you create once.</p>
+                <a class="text-link" href={`${github}#connect-gmail`}>Read the setup steps</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="limits" id="limits" aria-labelledby="limits-title">
+        <div class="wrap">
+          <div class="limits-head">
+            <h2 id="limits-title" class="heading rise">Small on purpose.</h2>
+            <p class="rise">TinyMails sends small batches to people who expect to hear from you, and stops there.</p>
+          </div>
+          <ul class="limits-list">
+            <li class="rise">It cannot read your inbox. The Gmail permission is send-only.</li>
+            <li class="rise">It adds no tracking pixels.</li>
+            <li class="rise">It does not detect replies or send follow-ups.</li>
+            <li class="rise">It does not write your emails.</li>
+            <li class="rise">It does not restart itself after a pause.</li>
+            <li class="rise">It keeps your contacts on your computer, nowhere else.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-top">
+        <p class="footer-status rise">v0.1.0 is a source release. Free and open source under AGPL-3.0.</p>
+        <ul class="footer-links rise">
+          <li><a href={github}>GitHub</a></li>
+          <li><a href={`${github}/issues`}>Report an issue</a></li>
+          <li><a href="/agent-guide.md">Agent guide</a></li>
+        </ul>
+        <p class="footer-by rise">A project by Gauthier</p>
+      </div>
+      <div class="wrap">
+        <svg class="footer-name" viewBox="0 0 1000 214" role="img" aria-label="TinyMails">
+          <text x="-6" y="170" textLength="1010" lengthAdjust="spacingAndGlyphs">TinyMails</text>
+        </svg>
+      </div>
+    </footer>
+
+    <svg width="0" height="0" class="defs" aria-hidden="true" focusable="false">
+      <symbol id="tiny-envelope" viewBox="0 0 40 30">
+        <rect class="env-body" x="0" y="4" width="34" height="24" />
+        <path class="env-flap" d="M0 4h34L17 17z" />
+        <g class="env-mark">
+          <circle cx="33" cy="7" r="7" />
+          <path d="M29.6 7.2l2.3 2.3 4.4-4.6" />
+        </g>
+      </symbol>
+    </svg>
+
+    <script>
+      import "../scripts/page";
+    </script>
+  </body>
+</html>
