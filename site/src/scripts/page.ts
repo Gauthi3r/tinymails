@@ -41,13 +41,30 @@ function setupCopy(): void {
     button.setAttribute("role", "button");
     const label = [...button.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()) as Text | undefined;
     if (!label) continue;
-    const words = label.data;
+    let words = label.data;
     let timer = 0;
+    // the install window's own button follows its tabs: the prompt, or the commands to run by hand
+    const handTab = button.hasAttribute("data-copy-tab") ? $<HTMLElement>("#tab-hand") : null;
+    const hand = $<HTMLElement>("[data-hand]");
+    const byHand = (): boolean => handTab?.getAttribute("aria-selected") === "true";
+    if (handTab) {
+      const promptWords = words;
+      new MutationObserver(() => {
+        clearTimeout(timer);
+        words = byHand() ? "Copy the commands" : promptWords;
+        label.data = words;
+        button.classList.remove("is-copied");
+        if (announce) announce.textContent = "";
+      }).observe(handTab, { attributes: true, attributeFilter: ["aria-selected"] });
+    }
     button.addEventListener("click", async (event) => {
       event.preventDefault();
+      const commands = byHand();
+      const done = commands ? "Copied." : COPIED;
       try {
-        await navigator.clipboard.writeText(prompt?.textContent ?? "");
+        await navigator.clipboard.writeText(commands ? (hand?.dataset.hand ?? "") : (prompt?.textContent ?? ""));
       } catch {
+        if (commands) return;
         // no clipboard: open the prompt, selected, ready to copy by hand
         $<HTMLButtonElement>("#tab-prompt")?.click();
         unfold();
@@ -55,9 +72,9 @@ function setupCopy(): void {
         if (prompt) getSelection()?.selectAllChildren(prompt);
         return;
       }
-      label.data = COPIED;
+      label.data = done;
       button.classList.add("is-copied");
-      if (announce) announce.textContent = COPIED;
+      if (announce) announce.textContent = done;
       clearTimeout(timer);
       timer = window.setTimeout(() => {
         label.data = words;

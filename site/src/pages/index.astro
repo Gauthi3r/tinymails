@@ -18,6 +18,8 @@ const queued = created.campaign.recipients.length;
 const excluded = created.excluded;
 const preview = world.preview();
 const rules = rulesLine(DEFAULT_RULES);
+// the middle of that line, "Monday to Friday, 09:00 to 17:00", for the hero window's limits strip
+const hours = rules.split(". ")[1];
 const cap = DEFAULT_RULES.dailyCap;
 
 // The default run: the test, one press of Start, and the pause at the cap.
@@ -113,12 +115,12 @@ const sections = [
   { id: "install", label: "Install" },
   { id: "questions", label: "Questions" },
 ];
-const safe = ["No inbox access", "No tracking pixels", "No automatic follow-ups", "No AI-written copy"];
+const safe = ["No inbox access", "No tracking pixels", "No automatic follow-ups", "No TinyMails account"];
 
 const steps = [
   { id: "agent", title: "Your agent queues it", line: "One request to TinyMails on your computer. The campaign arrives paused." },
   { id: "test", title: "The test lands in your inbox", line: "The real email, sent to you alone." },
-  { id: "start", title: "You press Start", line: "Nothing leaves before that." },
+  { id: "start", title: "You press Start", line: "Read the test first. The campaign waits, paused." },
   { id: "pace", title: "The queue paces itself", line: "25 a day, inside your hours, 30 to 45 seconds apart. At the cap it pauses until you press Start again." },
 ];
 const visualLabel: Record<string, string> = {
@@ -239,7 +241,7 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
           <div class="hero-text">
             <div class="hero__c">
               <h1 id="hero-h">A Gmail outbox for your agent.</h1>
-              <p class="hero__lead">Your agent queues the emails. You press Start. Gmail sends them, a few at a time.</p>
+              <p class="hero__lead">Your agent queues the emails. You press Start. Gmail sends them under a daily cap.</p>
               <div class="btn-row">
                 <a class="btn btn--primary" href="#install" data-copy>Copy the agent prompt<Fragment set:html={arrow} /></a>
                 <a class="btn btn--secondary" href={github}>View on GitHub</a>
@@ -263,6 +265,11 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
                 <div class="tm-win tm-flow__win" data-hero-win>
                   <Fragment set:html={bar} />
                   <div class="tm-win__body">
+                    <ul class="tm-limits">
+                      <li><b>{cap}</b> a day</li>
+                      <li class="tm-limits__hours">{hours}</li>
+                      <li><b>{DEFAULT_RULES.delayMinSeconds} to {DEFAULT_RULES.delayMaxSeconds}</b> seconds apart</li>
+                    </ul>
                     <div class="tm-card">
                       <div class="tm-row" data-hero-row>
                         <span class="tm-row__main">
@@ -423,8 +430,8 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
       <section class="section" id="safety" aria-labelledby="safety-h">
         <div class="wrap">
           <div class="section-head">
-            <h2 id="safety-h">Your contacts stay on your computer</h2>
-            <p>Contacts, history and tokens stay local. The Gmail permission can only send.</p>
+            <h2 id="safety-h">Stored on your computer</h2>
+            <p>TinyMails keeps contacts, history and tokens local. Gmail gets the emails you send. Your agent sees what you give it.</p>
           </div>
           <div class="grid tm-safety fill">
             <ul class="tm-nots">
@@ -450,14 +457,14 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
                 <button class="tab" role="tab" id="tab-prompt" aria-controls="panel-prompt" aria-selected="true" type="button">Agent prompt</button>
                 <button class="tab" role="tab" id="tab-hand" aria-controls="panel-hand" aria-selected="false" tabindex="-1" type="button">By hand</button>
               </div>
-              <a class="btn btn--primary tm-code__copy" href="#panel-prompt" data-copy>Copy the agent prompt</a>
+              <a class="btn btn--primary tm-code__copy" href="#panel-prompt" data-copy data-copy-tab>Copy the agent prompt</a>
             </div>
             <div class="tm-code__panel" role="tabpanel" id="panel-prompt" aria-labelledby="tab-prompt" tabindex="0">
               <pre data-prompt set:html={promptHtml} />
               <button class="tm-code__more" type="button" data-prompt-more aria-expanded="false" hidden>Show the whole prompt</button>
             </div>
             <div class="tm-code__panel" role="tabpanel" id="panel-hand" aria-labelledby="tab-hand" tabindex="0" hidden>
-              <pre>{hand.map((line) => (<span class="tm-code__line"><span class="tm-code__ps" aria-hidden="true">$</span>{line}{"\n"}</span>))}</pre>
+              <pre data-hand={hand.join("\n")}>{hand.map((line) => (<span class="tm-code__line"><span class="tm-code__ps" aria-hidden="true">$</span>{line}{"\n"}</span>))}</pre>
             </div>
           </div>
           </div>

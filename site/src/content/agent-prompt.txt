@@ -1,4 +1,4 @@
-Queue an email campaign for me with TinyMails. Do not send anything.
+Queue an email campaign for me with TinyMails. Do not start it.
 
 TinyMails is a local Gmail sending tool: https://github.com/Gauthi3r/tinymails
 

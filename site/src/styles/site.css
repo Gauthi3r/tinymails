@@ -161,6 +161,10 @@ html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --gro
 .tm-flow__win .tm-card { border-radius: 16px 16px 0 0; border-bottom: 0; }
 .tm-flow__win .tm-table tbody tr:nth-child(n+7) { display: none; }
 [data-hero-row].is-paused { background: #f3f7ff; }
+/* the limits the queue keeps, first thing in the hero window */
+.tm-limits { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; flex: none; }
+.tm-limits li { flex: 1 1 auto; padding: 7px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--tm-ui-line); color: var(--tm-ui-muted); font-size: 12.5px; text-align: center; white-space: nowrap; }
+.tm-limits b { color: var(--p-ink); font-weight: 600; }
 .tm-row.is-paused .tm-row__reason { color: var(--p-ink); }
 .tm-btn.is-asking { position: relative; }
 .tm-btn.is-asking::after { content: ""; position: absolute; inset: -4px; border-radius: 11px; border: 2px solid var(--tm-ui-pri); opacity: 0; animation: tm-ask 900ms cubic-bezier(.22, 1, .36, 1) 2; }
@@ -207,6 +211,9 @@ html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --gro
   .tm-flow__win .tm-win__body { padding: 10px 10px 0; gap: 8px; }
   .tm-flow__win .tm-row { padding: 8px 10px; gap: 8px; }
   .tm-flow__win .tm-row__cap { display: none; }
+  .tm-limits { gap: 6px; }
+  .tm-limits li { padding: 5px 8px; font-size: 11.5px; }
+  .tm-limits__hours { display: none; }
   .tm-flow__win .tm-row__reason { white-space: normal; }
   .tm-flow__win .tm-table th:last-child, .tm-flow__win .tm-table td:last-child { display: none; }
   .tm-flow__win .tm-table td, .tm-flow__win .tm-table th { padding: 6px 10px; }
@@ -442,7 +449,7 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
   #panel-prompt pre { columns: 1; }
   .tm-code__panel pre { padding: var(--s-2) var(--s-4) var(--s-4); font-size: 11.5px; }
   /* a phone shows the first steps and folds the rest: the button copies the whole prompt either way */
-  #panel-prompt[data-folded] pre { max-height: 15.5lh; overflow: hidden; -webkit-mask-image: linear-gradient(#000 45%, transparent); mask-image: linear-gradient(#000 45%, transparent); }
+  #panel-prompt[data-folded] pre { max-height: 9.5lh; overflow: hidden; -webkit-mask-image: linear-gradient(#000 45%, transparent); mask-image: linear-gradient(#000 45%, transparent); }
   .tm-code__more:not([hidden]) { display: block; width: calc(100% - 2 * var(--s-3)); margin: 0 var(--s-3) var(--s-3); height: 44px; border: 1px solid rgb(255 255 255 / 18%); border-radius: 999px; background: transparent; color: #fff; font: 500 15px/1 var(--font-text); cursor: pointer; }
   .tm-code__more:focus-visible { outline: 2px solid #8fb2ff; outline-offset: 2px; }
   .tm-note { font-size: var(--t-body); }
