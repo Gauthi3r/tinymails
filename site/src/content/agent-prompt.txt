@@ -16,6 +16,11 @@ Content-Type: application/json
 {"name": "...", "subject": "...", "body": "...", "accountIds": ["<id from step 2>"], "dailyCap": <the account's dailyCap>, "delayMinSeconds": <the account's>, "delayMaxSeconds": <the account's>, "recipients": [{"email": "...", "firstName": "...", "company": "..."}]}
 Send every contact as it is. TinyMails removes invalid, duplicate and do-not-contact addresses itself.
 
-5. The answer has "campaign" (its status is "paused") and "excluded" (each address with a reason: invalid, duplicate, do-not-contact or queued). Tell me how many recipients were queued and list every excluded address with its reason. Then stop.
+5. The answer has "campaign" (its status is "paused") and "excluded" (each address with a reason: invalid, duplicate, do-not-contact, or queued, which means it is already waiting in another campaign). If a request fails, the answer is {"error": "..."}: show me that message and stop.
 
-I will send the test and press Start myself in TinyMails. Never call /test-send or /start.
+6. Send me the test: POST http://127.0.0.1:3210/api/campaigns/<campaign id>/test-send
+It sends the real email to my own Gmail address only, and it unlocks Start.
+
+7. Tell me how many recipients were queued, list every excluded address with its reason, and tell me the test is in my inbox. Then stop.
+
+I will read the test and press Start myself in TinyMails. Never call /start.

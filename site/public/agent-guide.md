@@ -7,10 +7,11 @@ This guide describes TinyMails v0.1.0. Every request below was run against that 
 ## Your job, and where it ends
 
 1. Queue the campaign. It is always created paused.
-2. Report what was queued and what was excluded.
-3. Stop.
+2. Send the test. It goes to the user's own Gmail address only, and it unlocks Start.
+3. Report what was queued, what was excluded, and that the test is in their inbox.
+4. Stop.
 
-The user sends the test email and presses Start in the TinyMails window at `http://127.0.0.1:3210`. Do not call `/api/campaigns/:id/test-send` or `/api/campaigns/:id/start` unless the user tells you to in so many words. TinyMails has no separate agent permission: the API cannot tell you from the user, so this boundary is yours to keep.
+The user reads the test and presses Start in the TinyMails window at `http://127.0.0.1:3210`. Do not call `/api/campaigns/:id/start` unless the user tells you to in so many words. TinyMails has no separate agent permission: the API cannot tell you from the user, so this boundary is yours to keep.
 
 ## Before you start
 
@@ -69,6 +70,14 @@ Rules for the fields:
 - Two placeholders exist: `{firstName}` and `{company}`. A contact without a first name gets "there"; one without a company gets "your company".
 - `dailyCap` is a whole number from 1 to 500. Delays are in seconds, and the maximum cannot be below the minimum.
 - A campaign cannot be edited after it is created. If the user wants a change, ask them to stop the paused campaign in TinyMails and create a new one.
+
+## Send the test
+
+```bash
+curl -s -X POST http://127.0.0.1:3210/api/campaigns/<campaign id>/test-send
+```
+
+TinyMails sends the campaign's real email, personalised for one of its recipients, to the Gmail address of each account assigned to the campaign. Nothing goes to a recipient. The answer is the campaign with a `testedAt` time. In v0.1.0 the app's campaign list has no button for this step, so the test for a campaign you queued is yours to send.
 
 ## Useful extras
 
