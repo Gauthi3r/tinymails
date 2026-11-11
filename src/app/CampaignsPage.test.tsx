@@ -230,6 +230,17 @@ describe("campaign composer", () => {
     expect(await screen.findByText("TinyMails was restarted. Press Start to continue.")).toBeVisible();
   });
 
+  it("shows when each email left as a readable time", async () => {
+    const campaign = campaignFixture();
+    campaign.recipients[0] = { ...campaign.recipients[0], status: "sent", sentAt: "2026-08-29T10:02:00.000Z" };
+    render(<CampaignsPage api={fakeApi([campaign])} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "View Beta note" }));
+
+    expect(screen.queryByText("2026-08-29T10:02:00.000Z")).not.toBeInTheDocument();
+    expect(screen.getByText(/\b29\b/)).toBeVisible();
+  });
+
   it("shows a waiting campaign as waiting, with when it continues and a way to pause", async () => {
     const campaign = campaignFixture();
     campaign.status = "running";

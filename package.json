@@ -3,12 +3,12 @@
   "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Local-first Gmail mail merge for thoughtful, permission-based outreach.",
+  "description": "A local Gmail outbox for AI agents: queue campaigns over MCP, review them, and send under daily caps.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Gauthi3r/tinymails.git"
   },
-  "homepage": "https://github.com/Gauthi3r/tinymails#readme",
+  "homepage": "https://tinymails.vercel.app",
   "bugs": {
     "url": "https://github.com/Gauthi3r/tinymails/issues"
   },
@@ -23,13 +23,12 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "serve": "tsx src/server/index.ts",
     "mcp": "node scripts/mcp.mjs",
-    "lint": "oxlint .",
+    "lint": "oxlint . --ignore-pattern \"site/public/assets/**\"",
     "test": "vitest",
     "scan": "node scripts/scan-public.mjs",
     "check": "npm run scan && npm run lint && npm run typecheck && npm test -- --run && npm run build"
   },
   "dependencies": {
-    "@base-ui/react": "^1.7.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@modelcontextprotocol/server": "^2.4.0",
@@ -37,7 +36,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "express": "^5.1.0",
     "google-auth-library": "^11.0.2",
-    "lucide-react": "^0.544.0",
+    "lucide-react": "^1.72.0",
     "motion": "^12.23.24",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -53,8 +52,8 @@
     "@types/node": "^24.5.2",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
-    "@types/supertest": "^6.0.3",
-    "@vitejs/plugin-react": "^5.0.4",
+    "@types/supertest": "^7.2.1",
+    "@vitejs/plugin-react": "^6.3.0",
     "jsdom": "^27.0.0",
     "oxlint": "^1.17.0",
     "supertest": "^7.1.4",

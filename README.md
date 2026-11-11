@@ -1,31 +1,36 @@
 # TinyMails
 
-TinyMails is a local-first Gmail mail merge for small, permission-based campaigns. It keeps contacts, templates, sending history, and account configuration on your computer.
+**A Gmail outbox for your agent.** TinyMails runs on your computer. Your AI agent queues a small email campaign over MCP, you read the test and press Start, and Gmail sends it one message at a time under a daily cap.
 
-You run it from source: clone, `npm install`, `npm start`. It covers bring-your-own Google OAuth, reviewed CSV imports, reusable templates, a four-step campaign composer, Gmail delivery safeguards, local backups, and a one-command launcher.
+It is open source, has no cloud service, and keeps contacts, templates, sending history, and Google credentials on your machine.
 
-Version 0.2 adds an MCP connection, so an AI agent on the same computer can queue a campaign and send you the test while you keep the Start button. See [Connect an agent](#connect-an-agent).
+![The TinyMails campaigns page: a campaign waiting at 25 of 40 sent because the daily cap was reached, with the time it continues on its own, above a paused campaign with a Start button](docs/images/campaign-waiting.png)
 
-<img width="1050" height="429" alt="The TinyMails campaigns page, showing a paused campaign at 0 of 56 sent with a 30 per day cap, next to Send test and Stop controls" src="https://github.com/user-attachments/assets/ff07deed-7845-49c6-bde8-e017a8110d15" />
+Website: [tinymails.vercel.app](https://tinymails.vercel.app) · Guide for agents: [agent-guide.md](site/public/agent-guide.md)
+
+## How it works
+
+1. **Your agent queues it.** Over [MCP](#connect-an-agent), an agent on the same computer creates the campaign. It always arrives paused, and TinyMails reports every address it refused.
+2. **You get the test.** The real, personalized email lands in your own inbox. Nothing has gone to a recipient.
+3. **You press Start.** Agents cannot start a send unless you switch that on in Settings.
+4. **The queue paces itself.** One message at a time, random delays, inside your sending hours, up to your daily cap. At the cap it waits and carries on the next day.
+
+You can also do all of it yourself in the TinyMails window, without an agent.
 
 ## What it does
 
-- Imports and enriches contacts without overwriting known values.
-- Keeps each contact unique by email while allowing membership in multiple lists.
-- Paginates large contact libraries and supports bulk list changes or deletion.
-- Derives contact status from campaign history and the do-not-contact list.
-- Excludes duplicates, suppressed addresses, and contacts already queued elsewhere.
 - Lets an agent queue, test, check, and pause campaigns over MCP. Starting a send stays with you unless you switch that on.
-- Persists campaign state after each send and flags interrupted deliveries for manual review.
 - Enforces account caps, sending windows, and delays at the Gmail boundary.
 - Waits at the daily cap or outside the sending window, then continues by itself while TinyMails is running.
-- Connects a user-owned Google Desktop OAuth client with send-only access.
-- Stores Google tokens in the operating-system credential vault.
 - Sends the personalized campaign copy to each assigned Gmail account for approval before Start becomes available.
-- Exports a portable backup without credential metadata or tokens.
+- Excludes duplicates, suppressed addresses, and contacts already queued elsewhere.
+- Persists campaign state after each send and flags interrupted deliveries for manual review.
+- Connects a user-owned Google Desktop OAuth client with send-only access, and stores Google tokens in the operating-system credential vault.
+- Imports contacts from reviewed CSV files, keeps each contact unique by email across lists, and derives contact status from campaign history and the do-not-contact list.
+- Saves reusable templates and exports a portable backup without credential metadata or tokens.
 - Keeps Gmail access behind an adapter with no network calls in tests.
 
-TinyMails does not insert tracking pixels, host contact data, write email copy with AI, automate follow-ups, read the inbox, detect replies or bounces, restore backup files, or provide a managed OAuth application.
+TinyMails does not insert tracking pixels, host contact data, write email copy with AI, automate follow-ups, read the inbox, detect replies or bounces, send HTML email, restore backup files, or provide a managed OAuth application. Agents that run in the cloud cannot reach it.
 
 ## Requirements
 
@@ -168,7 +173,7 @@ Only contact people who expect to hear from you. Keep lists small, honor removal
 
 ## Roadmap
 
-The next useful additions are campaign cloning, lead editing, list renaming, backup restore, optional inbox-based reply tracking, and packaging that removes the Node/npm prerequisite. A managed OAuth client remains a later distribution step because it requires Google's verification process. The [v0.1 design record](docs/design/decisions/2026-08-29-tinymails-v0.1-design.md) and the [agent outbox record](docs/design/decisions/2026-11-11-agent-outbox.md) explain the product and safety decisions behind each release.
+TinyMails is meant to stay small and easy to fork for your own needs. Likely next: per-recipient custom fields for agents, and backup restore. A managed OAuth client would need Google's verification process and is not planned for now. The [v0.1 design record](docs/design/decisions/2026-08-29-tinymails-v0.1-design.md) and the [agent outbox record](docs/design/decisions/2026-11-11-agent-outbox.md) explain the product and safety decisions behind each release.
 
 ## License
 

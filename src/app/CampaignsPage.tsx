@@ -150,7 +150,7 @@ export function CampaignsPage({ api }: { api: AppApi }) {
                     {expanded ? <ChevronUp className="size-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="size-4 shrink-0 text-muted-foreground" />}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{campaign.name}</span>
-                      <span className="mt-0.5 block text-xs capitalize text-muted-foreground">
+                      <span className="mt-0.5 block text-xs text-muted-foreground first-letter:uppercase">
                         {waiting ? "waiting" : campaign.status} · {sent}/{campaign.recipients.length} sent{failed ? ` · ${failed} failed` : ""}
                       </span>
                       {campaign.status === "paused" && campaign.pauseReason ? (
@@ -192,6 +192,16 @@ export function CampaignsPage({ api }: { api: AppApi }) {
       ) : null}
     </PageFrame>
   );
+}
+
+/** When an email left, in the reader's own time zone and format. */
+function sentTime(sentAt: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(sentAt));
 }
 
 /** Why a running campaign is idle, and when it carries on by itself. */
@@ -259,7 +269,7 @@ function CampaignDetail({ campaign, stopping, onStop }: {
               <tr key={recipient.email} className="border-t border-border">
                 <td className="px-3 py-2.5">{recipient.email}</td>
                 <td className="px-3 py-2.5 capitalize">{recipient.status}</td>
-                <td className="max-w-72 truncate px-3 py-2.5 text-muted-foreground">{recipient.error ?? recipient.sentAt ?? "Waiting"}</td>
+                <td className="max-w-72 truncate px-3 py-2.5 text-muted-foreground">{recipient.error ?? (recipient.sentAt ? sentTime(recipient.sentAt) : "Waiting")}</td>
               </tr>
             ))}
           </tbody>
