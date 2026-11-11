@@ -78,6 +78,13 @@ html[data-tone="dark"] .btn--secondary:hover { background: rgb(255 255 255 / 18%
 .tm-nav.is-live > .nav__bar { position: relative; z-index: 1; }
 .tm-nav.is-live [data-part] { transform: translate(calc(var(--np) * var(--dx, 0) * 1px), calc(var(--np) * var(--dy, 0) * 1px)); }
 .tm-nav.is-live:not(.is-open) .nav__links { flex: 0 0 auto; margin-left: auto; position: relative; }
+/* a desktop's open bar: the mark at the left line, the words in the middle of the screen, the actions at the right line */
+@media (min-width: 1024px) {
+  .tm-nav.is-live:not(.is-open) > .nav__bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .tm-nav.is-live:not(.is-open) .nav__logo { justify-self: start; }
+  .tm-nav.is-live:not(.is-open) .nav__links { margin-left: 0; }
+  .tm-nav.is-live:not(.is-open) .nav__actions { justify-self: end; }
+}
 .tm-nav.is-live .nav__actions { gap: var(--s-2); }
 .tm-nav.is-live .tm-nav__gh { opacity: max(0, calc(1 - var(--np) * 2.4)); }
 .tm-nav.is-live.is-pill .tm-nav__gh { visibility: hidden; }
@@ -173,7 +180,19 @@ html[data-tone="dark"] .btn--secondary:hover { background: rgb(255 255 255 / 18%
 .tm-flow:not([data-state="still"]) .tm-fly__still { display: none; }
 
 /* the window in the hero: the campaign row, its bar and the recipients turning to Sent */
-.tm-hero .tm-win { box-shadow: var(--tm-float); border-color: rgb(255 255 255 / 40%); }
+/* the glass rim round every embedded screen: a clear band that blurs the sky behind it, brighter
+   along its top edge. It is the window's own border (the fill stops at the padding box), so its corners
+   follow the window's and the screen inside keeps its size and clipping. Clearer on the dark noon
+   sky (22%), milkier on the light scenes (60%). */
+.tm-hero .tm-win.tm-flow__win, .tm-scene :is(.tm-agent, .tm-mail, .tm-win) {
+  border: 10px solid rgb(255 255 255 / 22%); border-top-color: rgb(255 255 255 / 38%); background-clip: padding-box;
+  -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4); border-radius: 26px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 26%), 0 2px 6px rgb(8 30 100 / 10%), 0 34px 64px -30px rgb(8 30 100 / 50%);
+}
+.tm-scene :is(.tm-agent, .tm-mail, .tm-win) { border-width: 8px; border-color: rgb(255 255 255 / 60%); border-top-color: rgb(255 255 255 / 92%); border-radius: 26px;
+  box-shadow: 0 0 0 1px rgb(21 35 59 / 6%), 0 24px 48px -28px rgb(21 35 59 / 30%); }
+.tm-scene .tm-mail { border-radius: 24px; }
+@media (max-width: 639px) { .tm-hero .tm-win.tm-flow__win { border-width: 6px; border-radius: 22px; } }
 .tm-flow__win .tm-win__body { gap: 12px; padding: 12px 16px 0; overflow: hidden; }
 .tm-flow__win .tm-card { border-radius: 16px 16px 0 0; border-bottom: 0; }
 .tm-flow__win .tm-table tbody tr:nth-child(n+7) { display: none; }
@@ -409,7 +428,7 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 
 /* ---------------------------------------------------------------- safety: the computer as a boundary only Gmail's line crosses */
 .tm-safety { align-items: stretch; grid-template-rows: minmax(0, 1fr); flex: 1 1 0; min-height: 0; }
-.tm-nots { grid-column: 1 / span 5; display: grid; align-content: start; margin: 0; padding: 0; list-style: none; }
+.tm-nots { grid-column: 1 / span 5; display: grid; align-content: center; margin: 0; padding: 0; list-style: none; }
 .tm-nots li { display: flex; align-items: center; gap: 16px; min-height: 84px; border-bottom: 1px solid var(--line); font: var(--display-weight) var(--t-h3)/1.3 var(--font-display); letter-spacing: -0.02em; }
 .tm-nots li:first-child { border-top: 1px solid var(--line); }
 .tm-nots__icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(21 35 59 / 8%); color: var(--p-accent); flex: none; }
@@ -440,7 +459,7 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 
 /* ---------------------------------------------------------------- install: the prompt window on the lit panel
    The whole prompt stands in the window in two columns from 640px. A phone folds it after the first steps. */
-#install .panel.frame.tm-install { display: block; min-height: 0; flex: none; padding: var(--s-5); border: 1px solid rgb(255 255 255 / 16%); border-radius: 24px;
+#install .panel.frame.tm-install { display: block; min-height: 0; flex: none; padding: 10px; border: 1px solid rgb(255 255 255 / 16%); border-top-color: rgb(255 255 255 / 30%); border-radius: 28px;
   background: rgb(255 255 255 / 8%); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: 0 40px 80px -40px rgb(0 0 0 / 50%); }
 html:not([data-tone="dark"]) #install .panel.frame.tm-install { background: var(--tm-sky); border-color: transparent; }
 .tm-install > .tm-code { position: relative; z-index: 1; }
@@ -466,13 +485,13 @@ html:not([data-tone="dark"]) #install .panel.frame.tm-install { background: var(
 .tm-note { margin-top: var(--s-5); color: var(--ink); font-size: var(--t-lead); }
 .tm-note .link { margin-left: 4px; }
 @media (min-width: 640px) and (max-width: 1023px) {
-  #install .panel.frame.tm-install { padding: var(--s-3); }
+  #install .panel.frame.tm-install { padding: 10px; }
   .tm-code__bar { padding-bottom: 0; }
   #panel-prompt pre { font-size: 11px; line-height: 1.55; column-gap: var(--s-5); padding-inline: var(--s-4); }
   .tm-note { margin-top: var(--s-4); font-size: var(--t-body); }
 }
 @media (max-width: 639px) {
-  #install .panel.frame.tm-install { padding: var(--s-3); border-radius: 20px; }
+  #install .panel.frame.tm-install { padding: 8px; border-radius: 26px; }
   .tm-note .link { display: table; margin: var(--s-2) 0 0; font-size: 15px; }
   .tm-code__bar { flex-wrap: wrap; padding: var(--s-3); }
   .tm-code__copy { width: 100%; }
@@ -504,6 +523,8 @@ html:not([data-tone="dark"]) #install .panel.frame.tm-install { background: var(
    .wrap. Row 2: the links and "A project by". */
 .closing__cta { min-width: 0; }
 .tm-close__row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-6); }
+/* the row sits a little lower, so the gap down to the name is about 15% shorter */
+.close--word .tm-close__row { margin-top: clamp(24px, 6svh, 64px); }
 .tm-close__line { margin: 0; max-width: 24ch; font: var(--display-weight) clamp(22px, 1.4vw + 16px, 36px)/1.15 var(--font-display); letter-spacing: var(--display-tracking); color: var(--ink); }
 .close--word .close__word { max-width: none; margin: auto 0 0; overflow: visible; color: var(--ink); font-size: clamp(64px, 22vw, 318px); line-height: .9; letter-spacing: -0.055em; white-space: nowrap; }
 .tm-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-7); padding-top: var(--s-4); border-top: 1px solid var(--line); font-size: var(--t-small); color: var(--muted); }

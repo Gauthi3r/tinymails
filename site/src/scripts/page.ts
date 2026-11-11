@@ -227,7 +227,8 @@ function rowsHtml(state: SessionState, size: number, lead: number, just: number)
 function trimRows(tbody: HTMLTableSectionElement, box: HTMLElement): void {
   const rows = [...tbody.rows];
   rows.forEach((r) => { r.hidden = false; });
-  const bottom = box.getBoundingClientRect().bottom - 2;
+  // the window's glass rim is its border, so a row must end above the rim
+  const bottom = box.getBoundingClientRect().bottom - parseFloat(getComputedStyle(box).borderBottomWidth) - 2;
   for (const r of rows) if (r.getBoundingClientRect().bottom > bottom) r.hidden = true;
 }
 
