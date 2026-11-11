@@ -37,6 +37,11 @@ export function dayAndTime(ms: number): string {
   return `${weekdayName(ms)} ${clockTime(ms)}`;
 }
 
+/** "Tue 09:00", as the app's campaign row names the time a waiting campaign continues. */
+export function shortDayAndTime(ms: number): string {
+  return `${WEEKDAYS_SHORT[new Date(ms).getUTCDay()]} ${clockTime(ms)}`;
+}
+
 export interface WindowRule {
   days: number[];
   start: string;

@@ -2,8 +2,8 @@
 // the sky, the copy button, the condensing nav, the reveals, the hero's live stage and the four
 // chapter pictures.
 // The hero and the pace chapter run TinyMails' own queue code (src/sim), so the counts, the
-// times and the pause reason on screen are the product's.
-import { DemoSession, type SessionState } from "../sim/session";
+// times and the waiting line on screen are the product's.
+import { DemoSession, waitingLine, type SessionState } from "../sim/session";
 import { clockTime } from "../sim/time";
 import { setupSky } from "./sky";
 
@@ -242,7 +242,7 @@ const setButton = (btn: HTMLElement, running: boolean) => {
 // ---------------------------------------------------------------- the hero: the agent's queue, sending, paced, to Gmail
 // The listener below only draws: it never calls pause() or start() (a pause from inside the
 // listener emits a new state and calls itself again). The run ends where the product's runner
-// ends it, at the daily cap.
+// ends it, waiting at the daily cap.
 async function setupHero(): Promise<void> {
   const stage = $<HTMLElement>(".tm-stage");
   const flow = $<HTMLElement>("[data-hero]");
@@ -333,8 +333,7 @@ async function setupHero(): Promise<void> {
   const running = () => {
     statusEl.textContent = "Running";
     reasonEl.hidden = true;
-    rowEl.classList.remove("is-paused");
-    btn.classList.remove("is-asking");
+    rowEl.classList.remove("is-waiting");
     setButton(btn, true);
     trim();
   };
@@ -372,16 +371,14 @@ async function setupHero(): Promise<void> {
     const run = session.start();
     if (round > 0) win.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 420, easing: "ease-out", fill: "forwards" });
     await run;
-    // at the cap the runner pauses with its own reason, and Start waits for the human
+    // at the cap the runner leaves the campaign running and waiting, with the time it goes on by itself
     const end = session.state();
     session.dispose();
     await sleep(1000);
-    statusEl.textContent = "Paused";
-    reasonEl.textContent = end.campaign.pauseReason ?? reasonEl.textContent;
+    statusEl.textContent = "Waiting";
+    reasonEl.textContent = waitingLine(end.campaign) || reasonEl.textContent;
     reasonEl.hidden = false;
-    rowEl.classList.add("is-paused");
-    setButton(btn, false);
-    btn.classList.add("is-asking");
+    rowEl.classList.add("is-waiting");
     trim();
     if (once) return;
     await sleep(4200);
@@ -491,11 +488,11 @@ const players: Record<string, Player> = {
     const row = $<HTMLElement>("[data-pace-row]", fig)!;
     const btn = $<HTMLElement>("[data-pace-btn]", fig)!;
     const tbody = $<HTMLElement>("[data-pace-rows]", fig)!;
-    const done = reason.textContent ?? "";
+    const still = reason.textContent ?? "";
     fig.dataset.state = "0";
     // the product's own runner from the press of Start: 25 messages at the default 30 to 45 seconds
     // apart, played at 1/320 (about 0.12 s a message), each row turning to Sent with its real time;
-    // the picture rests on the pause within 5 s of its step opening
+    // then the wait at the cap, and Tuesday 09:00, when the runner carries on with no second Start
     const session = new DemoSession({ pace: (ms) => sleep(ms / 320) });
     session.subscribe((s) => {
       if (!alive()) return;
@@ -503,24 +500,31 @@ const players: Record<string, Player> = {
       bar.style.setProperty("--p", String(s.sent / s.queued));
       tbody.innerHTML = rowsHtml(s, 5, 3, s.sent - 1);
     });
+    const show = (label: string, line: string) => {
+      status.textContent = label;
+      reason.textContent = line;
+      row.classList.toggle("is-waiting", label === "Waiting");
+    };
     await session.sendTest();
-    row.classList.remove("is-paused");
-    reason.textContent = "";
-    status.textContent = "Running";
-    btn.classList.remove("is-asking");
+    show("Running", "");
+    btn.style.visibility = "";
     setButton(btn, true);
     await sleep(200);
     if (!alive()) { session.dispose(); return; }
     await session.start();
+    if (!alive()) { session.dispose(); return; }
+    show("Waiting", waitingLine(session.state().campaign) || still);
+    await sleep(1800);
+    if (!alive()) { session.dispose(); return; }
+    show("Running", "");
+    await session.continueWaiting();
     const end = session.state();
     session.dispose();
     if (!alive()) return;
     tbody.innerHTML = rowsHtml(end, 5, 3, -1);
-    status.textContent = "Paused";
-    reason.textContent = end.campaign.pauseReason ?? done;
-    row.classList.add("is-paused");
-    setButton(btn, false);
-    btn.classList.add("is-asking");
+    show(end.phase === "done" ? "Done" : "Waiting", end.phase === "done" ? "" : waitingLine(end.campaign));
+    // a finished campaign's row has no button (src/app/CampaignsPage.tsx)
+    if (end.phase === "done") btn.style.visibility = "hidden";
     delete fig.dataset.state;
   },
 };

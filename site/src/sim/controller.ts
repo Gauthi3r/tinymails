@@ -1,4 +1,4 @@
-import { renderMessage } from "./product";
+import { renderMessage, withoutWait } from "./product";
 import type { DemoWorld } from "./world";
 
 export type ControllerResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -60,7 +60,7 @@ export class DemoController {
       return { ok: false, error: "Only a running campaign can be paused." };
     }
     await world.campaigns.update(world.campaignId, (record) => ({
-      ...record,
+      ...withoutWait(record),
       status: "paused",
       pauseReason: "Paused manually.",
     }));

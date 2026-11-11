@@ -42,30 +42,52 @@ describe("the demo session", () => {
     expect(session.state().phase).toBe("ready");
   });
 
-  it("pauses at 25 with the real cap reason, waits at Tuesday 09:00, and needs a second Start", async () => {
+  it("waits at 25 with the runner's cap reason, then carries on by itself on Tuesday at 09:00", async () => {
     const session = new DemoSession();
     await session.sendTest();
     await session.start();
     let state = session.state();
     expect(state.sent).toBe(25);
-    expect(state.campaign.status).toBe("paused");
-    expect(state.campaign.pauseReason).toBe(CAP_REASON);
-    expect(dayAndTime(state.now)).toBe("Tuesday 09:00");
-    expect(state.status).toBe(
-      "The Gmail account's daily cap has been reached. It is now Tuesday 09:00. Press Start to continue.",
-    );
+    expect(state.campaign.status).toBe("running");
+    expect(state.campaign.pauseReason).toBeUndefined();
+    expect(state.campaign.waitingReason).toBe(CAP_REASON);
+    expect(dayAndTime(Date.parse(state.campaign.resumesAt ?? ""))).toBe("Tuesday 09:00");
     expect(state.phase).toBe("waiting");
+    expect(state.status).toBe(
+      "The Gmail account's daily cap has been reached. It continues on its own, Tue 09:00.",
+    );
 
-    await session.start();
+    // No second press of Start: the app's timer, with the clock at the campaign's own resumesAt.
+    await session.continueWaiting();
     state = session.state();
     expect(state.sent).toBe(40);
     expect(state.phase).toBe("done");
     expect(state.status).toBe("Done. 40 sent.");
+    expect(state.campaign.waitingReason).toBeUndefined();
+    expect(state.campaign.resumesAt).toBeUndefined();
+    expect(dayAndTime(Date.parse(state.campaign.recipients[25].sentAt ?? ""))).toBe("Tuesday 09:00");
     // 40 campaign messages plus the one test.
     expect(session.world.gmail.sent).toHaveLength(41);
   });
 
-  it("pauses manually with the real string and resumes on Start", async () => {
+  it("waits outside the sending window with the runner's reason and carries on at the next opening", async () => {
+    // a 09:00 to 09:05 window: about 8 messages fit before it closes
+    const session = new DemoSession({ rules: { ...DEFAULT_RULES, end: "09:05" } });
+    await session.sendTest();
+    await session.start();
+    let state = session.state();
+    expect(state.phase).toBe("waiting");
+    expect(state.campaign.waitingReason).toBe(WINDOW_REASON);
+    expect(state.sent).toBeGreaterThan(0);
+    expect(state.sent).toBeLessThan(25);
+    expect(dayAndTime(Date.parse(state.campaign.resumesAt ?? ""))).toBe("Tuesday 09:00");
+    await session.continueWaiting();
+    state = session.state();
+    expect(state.phase).toBe("done");
+    expect(state.sent).toBe(40);
+  });
+
+  it("pauses manually with the real string and needs Start to go on", async () => {
     let pauseAfter = 3;
     let session!: DemoSession;
     session = new DemoSession({
@@ -77,13 +99,18 @@ describe("the demo session", () => {
     await session.sendTest();
     await session.start();
     let state = session.state();
+    expect(state.campaign.status).toBe("paused");
     expect(state.campaign.pauseReason).toBe(MANUAL_REASON);
     expect(state.status).toBe("Paused manually.");
     expect(state.sent).toBe(3);
+    // the timer does not touch a paused campaign
+    await session.continueWaiting();
+    expect(session.state().sent).toBe(3);
+    expect(session.state().phase).toBe("paused");
     await session.start();
     state = session.state();
     expect(state.sent).toBe(25);
-    expect(state.campaign.pauseReason).toBe(CAP_REASON);
+    expect(state.campaign.waitingReason).toBe(CAP_REASON);
   });
 
   it("replays the same run for the same seed, and a different one for another seed", async () => {
@@ -98,7 +125,7 @@ describe("the demo session", () => {
   });
 });
 
-describe("the pause reasons", () => {
+describe("the waiting reasons", () => {
   it("are the runner's own strings", () => {
     expect(CAP_REASON).toBe("The Gmail account's daily cap has been reached.");
     expect(WINDOW_REASON).toBe("Outside the Gmail account's sending window.");

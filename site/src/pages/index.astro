@@ -5,7 +5,8 @@ import Mark from "../components/Mark.astro";
 import promptText from "../content/agent-prompt.txt?raw";
 import { senderEmail, userRequest, demoCampaign } from "../sim/demo-data";
 import { rulesLine } from "../sim/format";
-import { CAP_REASON, DemoSession } from "../sim/session";
+import { CAP_REASON, DemoSession, waitingLine } from "../sim/session";
+import { version } from "../../package.json";
 import { clockTime } from "../sim/time";
 import { DEFAULT_RULES, DemoWorld } from "../sim/world";
 import "../styles/site.css";
@@ -22,13 +23,15 @@ const rules = rulesLine(DEFAULT_RULES);
 const hours = rules.split(". ")[1];
 const cap = DEFAULT_RULES.dailyCap;
 
-// The default run: the test, one press of Start, and the pause at the cap.
+// The default run: the test, one press of Start, and the wait at the cap.
 const session = new DemoSession();
 await session.sendTest();
 await session.start();
 const capped = session.state();
 const capSent = capped.sent;
-if (capped.campaign.pauseReason !== CAP_REASON) throw new Error("The default run should pause at the daily cap.");
+if (capped.phase !== "waiting" || capped.campaign.waitingReason !== CAP_REASON) throw new Error("The default run should wait at the daily cap.");
+// "The Gmail account's daily cap has been reached. It continues on its own, Tue 09:00."
+const waitLine = waitingLine(capped.campaign);
 const recipients = capped.campaign.recipients.map((r) => ({
   email: r.email,
   sent: r.status === "sent",
@@ -83,21 +86,21 @@ const hand = [
 ];
 
 const questions = [
-  { q: "Which agents can use it?", a: "Any agent that can run commands on your computer. Agents that run in the cloud cannot reach it." },
-  { q: "Is there an MCP server?", a: "Not yet. Today your agent calls a local HTTP API.", link: { href: "/agent-guide.md", text: "Read the agent guide" } },
-  { q: "Can my agent send without me?", a: "The prompt tells it to stop after the test. TinyMails does not enforce that yet." },
-  { q: "Does the queue restart by itself?", a: "No. At the daily cap it pauses, and you press Start the next day." },
+  { q: "Which agents can use it?", a: "An agent on your computer that speaks MCP or can run commands. Agents that run in the cloud cannot reach it." },
+  { q: "Is there an MCP server?", a: "Yes. While TinyMails runs, it serves one at 127.0.0.1:3210/mcp.", link: { href: "/agent-guide.md", text: "Read the agent guide" } },
+  { q: "Can my agent send without me?", a: "Over MCP it can queue, test and pause, but not start, unless you allow it in Settings. An agent that runs commands can still reach the local API, so use one you trust." },
+  { q: "Does the queue go on by itself?", a: "Yes. At the daily cap or outside your hours it waits, then carries on. After you pause it, restart TinyMails or Gmail reports a problem, you press Start again." },
 ];
 
 // The safety picture: three nodes inside "Your computer" (drawn by the page under the diagram) and
 // Gmail outside it; the only line that leaves the box is the one to Gmail.
 const diagram = {
   layout: "free",
-  alt: "Inside your computer the agent sends one request to TinyMails, which keeps contacts, history and tokens there. The only line that leaves the computer goes to Gmail, with a send-only permission.",
+  alt: "Inside your computer the agent connects to TinyMails over MCP, which keeps contacts, history and tokens there. The only line that leaves the computer goes to Gmail, with a send-only permission.",
   ground: "none",
   motion: { cycle: 3.2 },
   nodes: [
-    { id: "agent", label: "Agent", icon: "ui:terminal", sub: "one request", at: [0.13, 0.36], atCompact: [0.34, 0.2] },
+    { id: "agent", label: "Agent", icon: "ui:terminal", sub: "MCP", at: [0.13, 0.36], atCompact: [0.34, 0.2] },
     { id: "app", label: "TinyMails", icon: "/assets/icons/tinymails.svg", sub: "127.0.0.1:3210", at: [0.42, 0.36], atCompact: [0.34, 0.5] },
     { id: "data", label: "Contacts, history, tokens", icon: "ui:database", at: [0.42, 0.78], atCompact: [0.34, 0.8] },
     { id: "gmail", label: "Gmail", icon: "gmail", sub: "send only", at: [0.86, 0.36], atCompact: [0.86, 0.5] },
@@ -118,16 +121,16 @@ const sections = [
 const safe = ["No inbox access", "No tracking pixels", "No automatic follow-ups", "No TinyMails account"];
 
 const steps = [
-  { id: "agent", title: "Your agent queues it", line: "One request to TinyMails on your computer. The campaign arrives paused." },
+  { id: "agent", title: "Your agent queues it", line: "One MCP call to TinyMails on your computer. The campaign arrives paused." },
   { id: "test", title: "The test lands in your inbox", line: "The real email, sent to you alone." },
   { id: "start", title: "You press Start", line: "Read the test first. The campaign waits, paused." },
-  { id: "pace", title: "The queue paces itself", line: "25 a day, inside your hours, 30 to 45 seconds apart. At the cap it pauses until you press Start again." },
+  { id: "pace", title: "The queue paces itself", line: "25 a day, inside your hours, 30 to 45 seconds apart. At the cap it waits, then carries on by itself." },
 ];
 const visualLabel: Record<string, string> = {
   agent: `An agent session: the request "${userRequest}", one call to TinyMails, and the answer: ${queued} queued, ${excluded.length} excluded, paused.`,
   test: `The agent session goes on: one more call to TinyMails sends the test, and the personalised email arrives in ${senderEmail}, the only address it goes to.`,
   start: "The paused campaign row in TinyMails. Start is pressed, the row turns to Running with Pause, and the first emails leave one at a time.",
-  pace: `The recipient list turns to Sent one row at a time and the count climbs to ${capSent} of ${queued}, then the campaign pauses: ${CAP_REASON} Start waits to be pressed again.`,
+  pace: `The recipient list turns to Sent one row at a time and the count climbs to ${capSent} of ${queued}, then the campaign waits: ${waitLine} On Tuesday at 09:00 it carries on by itself and sends the rest.`,
 };
 const brand = '<svg viewBox="0 0 64 44" aria-hidden="true"><g fill="currentColor" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"><path d="M55 9 L53 35 L33 27 Z"/><path d="M27 21 L39 31" stroke="#fff" stroke-width="16"/><path d="M9 9 L11 35 L33 27 Z"/><path d="M9 9 L33 27"/></g></svg>';
 const tabs = `<span class="tm-tabs" aria-hidden="true"><span class="tm-tabs__brand">${brand}</span><span class="tm-tab is-on">${icon.list}Campaigns</span><span class="tm-tab">${icon.users}Leads</span><span class="tm-tab">${icon.gear}Settings</span></span>`;
@@ -230,7 +233,7 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
           <div class="hero-text">
             <div class="hero__c">
               <h1 id="hero-h">A Gmail outbox for your agent.</h1>
-              <p class="hero__lead">Your agent queues the emails. You press Start. Gmail sends them under a daily cap.</p>
+              <p class="hero__lead">Your agent queues the emails over MCP. You press Start. Gmail sends them under a daily cap until the list is done.</p>
               <div class="btn-row">
                 <a class="btn btn--primary" href="#install" data-copy>Copy the agent prompt<Fragment set:html={arrow} /></a>
                 <a class="btn btn--secondary" href={github}>View on GitHub</a>
@@ -239,7 +242,7 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
             <div
               class="hero__window tm-stage"
               role="img"
-              aria-label={`Your agent has queued ${queued} emails. The TinyMails window on your computer sends the ${demoCampaign.name} campaign one message at a time to your Gmail, ${DEFAULT_RULES.delayMinSeconds} to ${DEFAULT_RULES.delayMaxSeconds} seconds apart, and pauses at ${cap}: ${CAP_REASON}`}
+              aria-label={`Your agent has queued ${queued} emails. The TinyMails window on your computer sends the ${demoCampaign.name} campaign one message at a time to your Gmail, ${DEFAULT_RULES.delayMinSeconds} to ${DEFAULT_RULES.delayMaxSeconds} seconds apart, and waits at ${cap}: ${waitLine}`}
             >
               <div class="tm-flow ui" aria-hidden="true" data-hero data-state="still">
                 <div class="tm-chip tm-chip--agent" data-hero-agent>
@@ -260,7 +263,7 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
                         <span class="tm-row__main">
                           <span class="tm-row__name">{demoCampaign.name}</span>
                           <span class="tm-row__meta"><span data-hero-status>Running</span> · <b data-hero-sent>{HERO_SENT}</b>/{queued} sent</span>
-                          <span class="tm-row__reason" data-hero-reason hidden>{CAP_REASON}</span>
+                          <span class="tm-row__reason" data-hero-reason hidden>{waitLine}</span>
                         </span>
                         <span class="tm-row__cap">{cap}/day</span>
                         <span class="tm-btn tm-btn--sec" data-hero-btn><span class="tm-btn__ic" set:html={icon.pause} /><span data-hero-btn-label>Pause</span></span>
@@ -291,7 +294,7 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
             </div>
           </div>
           <ul class="tm-facts" aria-label="Facts">
-            <li>v0.1.0</li>
+            <li>v{version}</li>
             <li>Runs on your computer</li>
             <li>Send-only Gmail access</li>
             <li>AGPL-3.0</li>
@@ -317,8 +320,8 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
                             <div class="tm-bubble" data-type={userRequest}>{userRequest}</div>
                             <div class="tm-call" data-call>
                               <span class="tm-call__state"><span class="tm-spin"></span><span class="tm-tick" set:html={icon.check} /></span>
-                              <span class="tm-call__verb">POST</span><span class="tm-call__path">127.0.0.1:3210/api/campaigns</span>
-                              <span class="tm-call__code">201</span>
+                              <span class="tm-call__verb">MCP</span><span class="tm-call__path">tinymails · queue_campaign</span>
+                              <span class="tm-call__code">OK</span>
                             </div>
                             <div class="tm-result" data-result>
                               <div class="tm-result__head"><b>{queued} queued, {excluded.length} excluded</b><span class="tm-badge">Paused</span></div>
@@ -334,11 +337,11 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
                           <div class="tm-agent tm-agent--short">
                             <div class="tm-agent__head"><span class="tm-agent__icon" set:html={icon.term} /><span>Agent</span><span class="tm-agent__dir">~/partners</span></div>
                             <div class="tm-agent__body">
-                              <div class="tm-call tm-call--done"><span class="tm-call__state"><span class="tm-tick tm-tick--on" set:html={icon.check} /></span><span class="tm-call__verb">POST</span><span class="tm-call__path">/api/campaigns</span><span class="tm-call__code">201</span></div>
+                              <div class="tm-call tm-call--done"><span class="tm-call__state"><span class="tm-tick tm-tick--on" set:html={icon.check} /></span><span class="tm-call__verb">MCP</span><span class="tm-call__path">queue_campaign</span><span class="tm-call__code">OK</span></div>
                               <div class="tm-call" data-call>
                                 <span class="tm-call__state"><span class="tm-spin"></span><span class="tm-tick" set:html={icon.check} /></span>
-                                <span class="tm-call__verb">POST</span><span class="tm-call__path">/api/campaigns/…/test-send</span>
-                                <span class="tm-call__code">200</span>
+                                <span class="tm-call__verb">MCP</span><span class="tm-call__path">send_test</span>
+                                <span class="tm-call__code">OK</span>
                               </div>
                             </div>
                           </div>
@@ -375,14 +378,14 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
                           <Fragment set:html={bar} />
                           <div class="tm-win__body">
                             <div class="tm-card">
-                              <div class="tm-row tm-row--pace is-paused" data-pace-row>
+                              <div class="tm-row tm-row--pace is-waiting" data-pace-row>
                                 <span class="tm-row__main">
                                   <span class="tm-row__name">{demoCampaign.name}</span>
-                                  <span class="tm-row__meta"><span data-pace-status>Paused</span> · <b data-pace-sent>{capSent}</b>/{queued} sent</span>
-                                  <span class="tm-row__reason" data-pace-reason>{CAP_REASON}</span>
+                                  <span class="tm-row__meta"><span data-pace-status>Waiting</span> · <b data-pace-sent>{capSent}</b>/{queued} sent</span>
+                                  <span class="tm-row__reason" data-pace-reason>{waitLine}</span>
                                 </span>
                                 <span class="tm-row__cap">{cap}/day</span>
-                                <span class="tm-btn tm-btn--pri" data-pace-btn><span class="tm-btn__ic" set:html={icon.play} /><span data-pace-btn-label>Start</span></span>
+                                <span class="tm-btn tm-btn--sec" data-pace-btn><span class="tm-btn__ic" set:html={icon.pause} /><span data-pace-btn-label>Pause</span></span>
                               </div>
                               <div class="tm-progress tm-progress--cap"><span data-pace-bar style={`--p:${capSent / queued}`}></span><i style={`--c:${cap / queued}`}></i></div>
                               <table class="tm-table">

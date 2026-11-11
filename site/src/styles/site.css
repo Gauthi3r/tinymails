@@ -196,16 +196,13 @@ html[data-tone="dark"] .btn--secondary:hover { background: rgb(255 255 255 / 18%
 .tm-flow__win .tm-win__body { gap: 12px; padding: 12px 16px 0; overflow: hidden; }
 .tm-flow__win .tm-card { border-radius: 16px 16px 0 0; border-bottom: 0; }
 .tm-flow__win .tm-table tbody tr:nth-child(n+7) { display: none; }
-[data-hero-row].is-paused { background: #f3f7ff; }
+[data-hero-row].is-waiting { background: #f3f7ff; }
 /* the limits the queue keeps, first thing in the hero window */
 .tm-limits { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; flex: none; }
 .tm-limits li { flex: 1 1 auto; padding: 7px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--tm-ui-line); color: var(--tm-ui-muted); font-size: 12.5px; text-align: center; white-space: nowrap; }
 .tm-limits b { color: var(--p-ink); font-weight: 600; }
-.tm-row.is-paused .tm-row__reason { color: var(--p-ink); }
-.tm-btn.is-asking { position: relative; }
-.tm-btn.is-asking::after { content: ""; position: absolute; inset: -4px; border-radius: 11px; border: 2px solid var(--tm-ui-pri); opacity: 0; animation: tm-ask 900ms cubic-bezier(.22, 1, .36, 1) 2; }
+.tm-row.is-waiting .tm-row__reason { color: var(--p-ink); white-space: normal; text-wrap: pretty; }
 .tm-flow.is-held * { animation-play-state: paused !important; }
-@keyframes tm-ask { 0% { opacity: .7; transform: scale(.94); } 70%, 100% { opacity: 0; transform: scale(1.12); } }
 
 .tm-facts {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: var(--gutter); margin: 0; padding: 0; list-style: none;
@@ -420,8 +417,8 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 .tm-row--pace .tm-row__name { font-size: 15px; }
 .tm-row--pace .tm-row__meta { font-size: 13px; }
 .tm-row--pace .tm-row__meta b { font-size: 15px; }
-.tm-row--pace.is-paused { background: #f3f7ff; }
-.tm-row--pace.is-paused .tm-row__reason { color: var(--p-ink); font-weight: 500; }
+.tm-row--pace.is-waiting { background: #f3f7ff; }
+.tm-row--pace.is-waiting .tm-row__reason { color: var(--p-ink); font-weight: 500; }
 .tm-progress--cap { height: 6px; margin-bottom: 14px; }
 .tm-win--pace .tm-table td { padding: 9px 14px; font-size: 12.5px; }
 .tm-rules { margin: 0; padding: 9px 14px; border-radius: 10px; background: #fff; border: 1px solid var(--tm-ui-line); color: var(--tm-ui-muted); font-size: 12.5px; }
@@ -541,7 +538,7 @@ html:not([data-tone="dark"]) #install .panel.frame.tm-install { background: var(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tm-btn.is-asking::after, .tm-chip.is-hit, tr.is-just .tm-pill { animation: none; }
+  .tm-chip.is-hit, tr.is-just .tm-pill { animation: none; }
 }
 
 /* ---------------------------------------------------------------- the chapters at rest without the moment's script (no script, a
