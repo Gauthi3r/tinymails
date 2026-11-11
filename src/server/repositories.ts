@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { normalizeEmail } from "../domain/email";
 import type { Account, AppSettings, Campaign, ContactList, Lead, Template } from "../domain/types";
-import { JsonStore } from "./json-store";
+import { JsonStore, replaceFile } from "./json-store";
 
 interface Identified {
   id: string;
@@ -208,7 +208,7 @@ export class SuppressionListRepository {
       encoding: "utf8",
       mode: 0o600,
     });
-    await rename(temporaryPath, this.path);
+    await replaceFile(temporaryPath, this.path);
   }
 }
 
