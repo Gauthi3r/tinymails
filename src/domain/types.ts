@@ -73,6 +73,13 @@ export interface Campaign {
   testedAt?: string;
   status: CampaignStatus;
   pauseReason?: string;
+  /**
+   * Set while a running campaign waits for the daily cap to reset or the
+   * sending window to open. It continues by itself; nobody has to press Start.
+   */
+  waitingReason?: string;
+  /** When that wait should end, as an ISO time. */
+  resumesAt?: string;
   recipients: Recipient[];
 }
 
@@ -88,4 +95,12 @@ export interface OutgoingMessage {
   to: string;
   subject: string;
   body: string;
+}
+
+export interface AppSettings {
+  /**
+   * Off by default: agents connected over MCP can queue, test and pause, but
+   * only the person at the TinyMails window can start a send.
+   */
+  agentsCanStart: boolean;
 }

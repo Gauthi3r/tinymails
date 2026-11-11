@@ -4,10 +4,13 @@ import { KeyringCredentialVault } from "../gmail/credential-vault";
 import { GoogleGmailAdapter } from "../gmail/google-adapter";
 import { GoogleAuthLibraryProvider, GoogleOAuthService } from "../gmail/google-oauth";
 import { createApp } from "./app";
+import { CampaignRunner } from "./campaign-runner";
 import { resolveDataDir } from "./data-dir";
 import { acquireDataDirectoryLock, type DataDirectoryLock } from "./instance-lock";
-import { listenOnLoopback, resolveStaticDirectory } from "./local-server";
+import { listenOnLoopback, resolveMcpBridgePath, resolveStaticDirectory } from "./local-server";
 import { createRepositories } from "./repositories";
+
+const RESUME_CHECK_MILLISECONDS = 60_000;
 
 try {
   await startServer();
@@ -35,16 +38,30 @@ async function startServer(): Promise<void> {
       provider: new GoogleAuthLibraryProvider(),
     });
 
+    const runner = new CampaignRunner({
+      campaigns: repositories.campaigns,
+      accounts: repositories.accounts,
+      suppression: repositories.suppression,
+      gmail,
+    });
     const app = createApp({
       repositories,
       gmail,
       dataDir,
       oauth,
       oauthRedirectUri: `http://127.0.0.1:${port}/api/oauth/google/callback`,
+      runner,
+      mcpBridgePath: resolveMcpBridgePath(import.meta.url),
     });
     app.use(express.static(resolveStaticDirectory(import.meta.url)));
 
     await listenOnLoopback(app, port);
+    // A campaign waiting on its daily cap or sending window continues from here.
+    setInterval(() => {
+      void runner.resumeWaiting().catch((error: unknown) => {
+        console.error("TinyMails could not resume waiting campaigns", error);
+      });
+    }, RESUME_CHECK_MILLISECONDS).unref();
     console.log(`TinyMails is running at http://127.0.0.1:${port}`);
   } catch (error) {
     await lock.release();

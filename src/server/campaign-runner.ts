@@ -1,4 +1,5 @@
-import { localDay, renderMessage, sentToday } from "../domain/campaigns";
+import { renderMessage, sentToday, UNKNOWN_DELIVERY_REASON, withoutWait } from "../domain/campaigns";
+import { isWithinSendingWindow, localDay, nextSendTime } from "../domain/schedule";
 import type { Account, Campaign } from "../domain/types";
 import type { GmailAccountAdapter, SendResult } from "../gmail/adapter";
 
@@ -27,6 +28,19 @@ interface CampaignRunnerDependencies {
   random?: () => number;
 }
 
+export const CAP_WAIT_REASON = "The Gmail account's daily cap has been reached.";
+export const WINDOW_WAIT_REASON = "Outside the Gmail account's sending window.";
+
+interface DeliveryWait {
+  reason: string;
+  resumesAt?: string;
+}
+
+/**
+ * Sends a running campaign one message at a time. At the daily cap or outside
+ * the sending window the campaign stays running and waits: `run` returns, and
+ * the next `resumeWaiting` call picks it up once sending is allowed again.
+ */
 export class CampaignRunner {
   private readonly activeCampaigns = new Set<string>();
   private readonly accountTails = new Map<string, Promise<void>>();
@@ -50,6 +64,19 @@ export class CampaignRunner {
     }
   }
 
+  /**
+   * Runs every campaign that is running but idle, which is how a campaign
+   * waiting on its cap or window continues the next day. Call it on a timer.
+   */
+  async resumeWaiting(): Promise<void> {
+    const campaigns = await this.dependencies.campaigns.list();
+    await Promise.all(
+      campaigns
+        .filter((campaign) => campaign.status === "running" && !this.activeCampaigns.has(campaign.id))
+        .map((campaign) => this.run(campaign.id)),
+    );
+  }
+
   private async runCampaign(campaignId: string): Promise<void> {
     while (true) {
       const campaign = await this.dependencies.campaigns.get(campaignId);
@@ -59,7 +86,7 @@ export class CampaignRunner {
       const recipient = campaign.recipients.find((item) => item.status === "pending");
       if (!recipient) {
         await this.dependencies.campaigns.update(campaignId, (latest) => ({
-          ...latest,
+          ...withoutWait(latest),
           status: latest.status === "running" ? "done" : latest.status,
           pauseReason: undefined,
         }));
@@ -73,7 +100,7 @@ export class CampaignRunner {
           if (target) target.error = "This Gmail account is unavailable.";
           latest.status = "paused";
           latest.pauseReason = "This Gmail account is unavailable.";
-          return latest;
+          return withoutWait(latest);
         });
         return;
       }
@@ -101,13 +128,15 @@ export class CampaignRunner {
     if (currentRecipient?.status !== "pending") return { continue: true };
 
     const now = this.clock();
-    const pauseReason = await this.deliveryPauseReason(current, account, now);
-    if (pauseReason) {
-      await this.dependencies.campaigns.update(campaignId, (latest) => ({
-        ...latest,
-        status: "paused",
-        pauseReason,
-      }));
+    const wait = await this.deliveryWait(current, account, now);
+    if (wait) {
+      if (current.waitingReason !== wait.reason || current.resumesAt !== wait.resumesAt) {
+        await this.dependencies.campaigns.update(campaignId, (latest) =>
+          latest.status === "running"
+            ? { ...withoutWait(latest), waitingReason: wait.reason, ...(wait.resumesAt ? { resumesAt: wait.resumesAt } : {}) }
+            : latest,
+        );
+      }
       return { continue: false };
     }
 
@@ -123,7 +152,7 @@ export class CampaignRunner {
         target.status = "sending";
         delete target.error;
       }
-      return latest;
+      return withoutWait(latest);
     });
     const claimedRecipient = claimed ? findRecipient(claimed, email) : null;
     if (!claimed || claimed.status !== "running" || claimedRecipient?.status !== "sending") {
@@ -154,11 +183,11 @@ export class CampaignRunner {
         if (target) {
           target.status = "failed";
           target.failedAt = now.toISOString();
-          target.error = "Delivery result is unknown. Check Gmail Sent before retrying.";
-          }
-          latest.status = "paused";
-          latest.pauseReason = "Delivery result is unknown. Check Gmail Sent before retrying.";
-          return latest;
+          target.error = UNKNOWN_DELIVERY_REASON;
+        }
+        latest.status = "paused";
+        latest.pauseReason = UNKNOWN_DELIVERY_REASON;
+        return latest;
       });
       return { continue: false };
     }
@@ -167,14 +196,18 @@ export class CampaignRunner {
     return shouldContinue ? { continue: true, campaign: claimed } : { continue: false };
   }
 
-  private async deliveryPauseReason(campaign: Campaign, account: Account, now: Date): Promise<string | null> {
-    if (!isWithinSendingWindow(account, now)) return "Outside the Gmail account's sending window.";
+  private async deliveryWait(campaign: Campaign, account: Account, now: Date): Promise<DeliveryWait | null> {
     const campaigns = await this.dependencies.campaigns.list();
     const cap = Math.min(campaign.dailyCap, account.dailyCap);
-    if (sentToday(campaigns, account.id, localDay(now, account.timeZone), account.timeZone) >= cap) {
-      return "The Gmail account's daily cap has been reached.";
-    }
-    return null;
+    const capReached = sentToday(campaigns, account.id, localDay(now, account.timeZone), account.timeZone) >= cap;
+    const reason = !isWithinSendingWindow(account, now)
+      ? WINDOW_WAIT_REASON
+      : capReached
+        ? CAP_WAIT_REASON
+        : null;
+    if (!reason) return null;
+    const resumesAt = nextSendTime(account, now, capReached)?.toISOString();
+    return { reason, ...(resumesAt ? { resumesAt } : {}) };
   }
 
   private async applyResult(
@@ -273,33 +306,6 @@ function delaySeconds(campaign: Campaign, account: Account, random: number): num
   const configuredMaximum = Math.min(campaign.delayMaxSeconds, account.delayMaxSeconds);
   const maximum = Math.max(minimum, configuredMaximum);
   return minimum + Math.floor(random * (maximum - minimum + 1));
-}
-
-function isWithinSendingWindow(account: Account, date: Date): boolean {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: account.timeZone,
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const weekdays: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-  const day = weekdays[values.weekday];
-  const time = `${values.hour}:${values.minute}`;
-  const { days, start, end } = account.sendingWindow;
-  if (start <= end) return days.includes(day) && time >= start && time <= end;
-  if (time >= start) return days.includes(day);
-  if (time <= end) return days.includes((day + 6) % 7);
-  return false;
 }
 
 function wait(milliseconds: number): Promise<void> {

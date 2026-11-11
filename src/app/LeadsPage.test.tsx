@@ -143,11 +143,13 @@ function fakeApi(response: LeadsResponse) {
   return {
     getCampaigns: vi.fn(async () => []),
     getLeads: vi.fn(async () => response),
+    setAgentsCanStart: vi.fn(async (allowed: boolean) => allowed),
     getSettings: vi.fn(async () => ({
       accounts: [],
       dataDir: "/tmp/tinymails-test",
       version: "0.1.0",
       suppressionCount: 0,
+        agentsCanStart: false,
     })),
     startGoogleOAuth: vi.fn(),
     getGoogleOAuthStatus: vi.fn(),

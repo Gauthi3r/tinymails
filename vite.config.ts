@@ -14,6 +14,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": apiProxy,
+      "/mcp": apiProxy,
     },
   },
   test: {

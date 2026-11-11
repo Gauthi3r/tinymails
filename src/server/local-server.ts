@@ -26,3 +26,7 @@ export function listenOnLoopback(app: Express, port: number): Promise<Server> {
 export function resolveStaticDirectory(moduleUrl: string): string {
   return resolve(dirname(fileURLToPath(moduleUrl)), "../..", "dist");
 }
+
+export function resolveMcpBridgePath(moduleUrl: string): string {
+  return resolve(dirname(fileURLToPath(moduleUrl)), "../..", "scripts", "mcp.mjs");
+}

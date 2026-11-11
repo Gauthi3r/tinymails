@@ -222,12 +222,25 @@ describe("campaign composer", () => {
     expect(api.stopCampaign).toHaveBeenCalledWith("campaign-1");
   });
 
-  it("shows the reason an automatic pause cannot make progress", async () => {
+  it("shows the reason a paused campaign needs the user", async () => {
     const campaign = campaignFixture();
-    campaign.pauseReason = "Outside the Gmail account's sending window.";
+    campaign.pauseReason = "TinyMails was restarted. Press Start to continue.";
     render(<CampaignsPage api={fakeApi([campaign])} />);
 
-    expect(await screen.findByText("Outside the Gmail account's sending window.")).toBeVisible();
+    expect(await screen.findByText("TinyMails was restarted. Press Start to continue.")).toBeVisible();
+  });
+
+  it("shows a waiting campaign as waiting, with when it continues and a way to pause", async () => {
+    const campaign = campaignFixture();
+    campaign.status = "running";
+    campaign.waitingReason = "The Gmail account's daily cap has been reached.";
+    campaign.resumesAt = "2026-08-31T09:00:00.000Z";
+    render(<CampaignsPage api={fakeApi([campaign])} />);
+
+    expect(await screen.findByText(/^waiting · 0\/2 sent$/)).toBeVisible();
+    expect(screen.getByText(/^The Gmail account's daily cap has been reached\. It continues on its own, .+\.$/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause Beta note" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Start Beta note" })).not.toBeInTheDocument();
   });
 
 });
@@ -272,6 +285,7 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
       lists: [list],
       pagination: { page: 1, pageSize: 100, total: 3, pages: 1 },
     })),
+    setAgentsCanStart: vi.fn(async (allowed: boolean) => allowed),
     getSettings: vi.fn(async () => ({
       accounts: [{
         id: "account-1",
@@ -288,6 +302,7 @@ function fakeApi(initialCampaigns: Campaign[] = []) {
       dataDir: "/tmp/tinymails-test",
       version: "0.1.0",
       suppressionCount: 0,
+        agentsCanStart: false,
     })),
     startGoogleOAuth: vi.fn(),
     getGoogleOAuthStatus: vi.fn(),

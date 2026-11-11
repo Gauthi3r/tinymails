@@ -7,6 +7,7 @@ import type { Account } from "../src/domain/types";
 import { FakeGmailAccountAdapter } from "../src/gmail/fake-adapter";
 import { createApp } from "../src/server/app";
 import { createRepositories, type Repositories } from "../src/server/repositories";
+import { APP_VERSION } from "../src/version";
 
 const now = new Date("2026-08-29T10:00:00.000Z");
 
@@ -26,6 +27,42 @@ describe("local API", () => {
       dataDir,
       clock: () => now,
     });
+  });
+
+  it("keeps agents from starting campaigns until the user allows it", async () => {
+    const initial = await request(app).get("/api/settings").expect(200);
+    await request(app).post("/api/settings").send({ agentsCanStart: "yes" })
+      .expect(400, { error: "Choose whether agents can start campaigns." });
+    await request(app).post("/api/settings").send({ agentsCanStart: true }).expect(200, { agentsCanStart: true });
+    const updated = await request(app).get("/api/settings").expect(200);
+
+    expect(initial.body.agentsCanStart).toBe(false);
+    expect(updated.body.agentsCanStart).toBe(true);
+    expect(await repositories.settings.read()).toEqual({ agentsCanStart: true });
+  });
+
+  it("clears a waiting note when the user pauses", async () => {
+    await repositories.campaigns.save({
+      id: "campaign-waiting",
+      name: "Waiting",
+      subject: "Hello",
+      body: "Hi",
+      accountIds: ["account-1"],
+      dailyCap: 25,
+      delayMinSeconds: 30,
+      delayMaxSeconds: 45,
+      createdAt: now.toISOString(),
+      status: "running",
+      waitingReason: "The Gmail account's daily cap has been reached.",
+      resumesAt: "2026-08-30T09:00:00.000Z",
+      recipients: [{ email: "ada@example.com", accountId: "account-1", status: "pending" }],
+    });
+
+    const paused = await request(app).post("/api/campaigns/campaign-waiting/pause").expect(200);
+
+    expect(paused.body.campaign).toMatchObject({ status: "paused", pauseReason: "Paused manually." });
+    expect(paused.body.campaign).not.toHaveProperty("waitingReason");
+    expect(paused.body.campaign).not.toHaveProperty("resumesAt");
   });
 
   it("rejects non-loopback Host headers before exposing local data", async () => {
@@ -629,7 +666,7 @@ describe("local API", () => {
     expect(response.headers["content-disposition"]).toContain("tinymails-backup-2026-08-29.json");
     expect(response.body).toMatchObject({
       product: "TinyMails",
-      version: "0.1.0",
+      version: APP_VERSION,
       data: {
         accounts: [expect.objectContaining({ email: "sender@example.com" })],
         leads: [expect.objectContaining({ email: "ada@example.com" })],

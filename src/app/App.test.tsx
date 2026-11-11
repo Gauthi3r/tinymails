@@ -39,11 +39,13 @@ describe("TinyMails app shell", () => {
       suppressEmails: async () => [],
       getTemplates: async () => [],
       saveTemplate: async () => { throw new Error("Not used"); },
+      setAgentsCanStart: async (allowed: boolean) => allowed,
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",
         version: "0.1.0",
         suppressionCount: 0,
+        agentsCanStart: false,
       }),
     };
     render(<App api={fakeApi} />);
@@ -98,11 +100,13 @@ describe("TinyMails app shell", () => {
       suppressEmails: async () => [],
       getTemplates: async () => [],
       saveTemplate: async () => { throw new Error("Not used"); },
+      setAgentsCanStart: async (allowed: boolean) => allowed,
       getSettings: async () => ({
         accounts: [],
         dataDir: "/tmp/tinymails-test",
         version: "0.1.0",
         suppressionCount: 0,
+        agentsCanStart: false,
       }),
     };
     render(<App api={fakeApi} />);

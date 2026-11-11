@@ -47,6 +47,10 @@ export interface SettingsResponse {
   dataDir: string;
   version: string;
   suppressionCount: number;
+  /** Whether an agent connected over MCP may start a campaign. Off by default. */
+  agentsCanStart: boolean;
+  /** Absolute path of the stdio MCP command, when the server knows it. */
+  mcpBridgePath?: string;
 }
 
 export type GoogleOAuthStatus =
@@ -58,6 +62,7 @@ export interface AppApi {
   getCampaigns(): Promise<Campaign[]>;
   getLeads(filters?: LeadFilters): Promise<LeadsResponse>;
   getSettings(): Promise<SettingsResponse>;
+  setAgentsCanStart(allowed: boolean): Promise<boolean>;
   startGoogleOAuth(client: unknown): Promise<{ sessionId: string; authorizationUrl: string }>;
   getGoogleOAuthStatus(sessionId: string): Promise<GoogleOAuthStatus>;
   sendTestEmail(accountId: string): Promise<{ ok: true; messageId: string }>;
@@ -95,6 +100,9 @@ export function createHttpApi(fetcher: typeof fetch = fetch): AppApi {
     },
     async getSettings() {
       return getJson<SettingsResponse>(fetcher, "/api/settings");
+    },
+    async setAgentsCanStart(allowed) {
+      return (await sendJson<{ agentsCanStart: boolean }>(fetcher, "/api/settings", { agentsCanStart: allowed })).agentsCanStart;
     },
     async startGoogleOAuth(client) {
       return sendJson(fetcher, "/api/oauth/google/start", { client });
