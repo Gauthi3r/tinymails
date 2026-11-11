@@ -1,0 +1,523 @@
+---
+import manropeUrl from "@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url";
+import monoUrl from "@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2?url";
+import Mark from "../components/Mark.astro";
+import promptText from "../content/agent-prompt.txt?raw";
+import { senderEmail, userRequest, demoCampaign } from "../sim/demo-data";
+import { rulesLine } from "../sim/format";
+import { CAP_REASON, DemoSession } from "../sim/session";
+import { clockTime } from "../sim/time";
+import { DEFAULT_RULES, DemoWorld } from "../sim/world";
+import "../styles/site.css";
+
+// Every number, address and status line below comes from running TinyMails'
+// own code at build time (src/sim), so the page reads right without script.
+const world = new DemoWorld();
+const { created } = world;
+const queued = created.campaign.recipients.length;
+const excluded = created.excluded;
+const preview = world.preview();
+const rules = rulesLine(DEFAULT_RULES);
+// the middle of that line, "Monday to Friday, 09:00 to 17:00", for the hero window's limits strip
+const hours = rules.split(". ")[1];
+const cap = DEFAULT_RULES.dailyCap;
+
+// The default run: the test, one press of Start, and the pause at the cap.
+const session = new DemoSession();
+await session.sendTest();
+await session.start();
+const capped = session.state();
+const capSent = capped.sent;
+if (capped.campaign.pauseReason !== CAP_REASON) throw new Error("The default run should pause at the daily cap.");
+const recipients = capped.campaign.recipients.map((r) => ({
+  email: r.email,
+  sent: r.status === "sent",
+  at: r.sentAt ? clockTime(Date.parse(r.sentAt)) : "Waiting",
+}));
+type Row = { email: string; sent: boolean; at: string };
+// A window of the recipient table, as the hero and chapter four show it at rest.
+const rowsAt = (sent: number, size: number, lead: number): Row[] => {
+  const start = Math.max(0, Math.min(recipients.length - size, sent - lead));
+  return recipients.slice(start, start + size).map((r, i) => (start + i < sent ? r : { ...r, sent: false, at: "Waiting" }));
+};
+// The hero rests part way through Monday morning (its loop counts on from here to the cap).
+const HERO_SENT = 12;
+const heroRows = rowsAt(HERO_SENT, 7, 3);
+const paceRows = rowsAt(capSent, 5, 3);
+
+const title = "TinyMails - A Gmail outbox for your agent";
+const description =
+  "TinyMails is a local, open-source Gmail outbox: your agent queues a small campaign on your computer, you read the test and press Start.";
+const origin = "https://tinymails.com";
+const github = "https://github.com/Gauthi3r/tinymails";
+const prompt = promptText.trim();
+// Light code colouring for the prompt panel (the copy button copies the file's own text). The
+// <angle> fill-ins are the values the agent supplies, set apart from the literal JSON.
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// One pass over the text, so no rule runs inside another's markup.
+const TOKEN = /(&lt;[^&\n]+?&gt;)|("[^"\n]*")|(https?:\/\/[^\s<"]+)|^(POST|GET|Content-Type:)|^(\d\.)/gm;
+const promptHtml = esc(prompt).replace(TOKEN, (m, fill, str, url, verb) =>
+  `<span class="${fill ? "tk-v" : str ? "tk-s" : url ? "tk-u" : verb ? "tk-k" : "tk-n"}">${m}</span>`);
+
+const arrow = `<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg>`;
+const icon = {
+  play: `<svg viewBox="0 0 16 16" aria-hidden="true"><path class="fill" d="M5 3.2v9.6L12.6 8z"/></svg>`,
+  pause: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"/></svg>`,
+  check: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg>`,
+  term: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 4.5 3.5 3.5L3 11.5M8 12h5"/></svg>`,
+  list: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></svg>`,
+  users: `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.8 13.5a4.2 4.2 0 0 1 8.4 0M10.5 3.3a2.5 2.5 0 0 1 0 4.4M12 13.5a4.2 4.2 0 0 0-1.6-3.3"/></svg>`,
+  gear: `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></svg>`,
+  inbox: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 9.5 3.8 3.5h8.4L14 9.5v3H2z"/><path d="M2 9.5h3.5l1 1.5h3l1-1.5H14"/></svg>`,
+  no: `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="m3.8 12.2 8.4-8.4"/></svg>`,
+  ask: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 6.1a2.1 2.1 0 1 1 3 1.9c-.6.3-1 .8-1 1.5v.4"/><circle class="fill" cx="8" cy="12.2" r=".9"/></svg>`,
+};
+// the tiny envelope, the page's one motif: a white letter with a cobalt flap
+const envelope = `<svg class="tm-envelope" viewBox="0 0 24 17" aria-hidden="true"><rect class="tm-envelope__body" x=".75" y=".75" width="22.5" height="15.5" rx="2.5"/><path class="tm-envelope__flap" d="M2 2.2 12 9.4 22 2.2"/></svg>`;
+
+const hand = [
+  "git clone https://github.com/Gauthi3r/tinymails.git",
+  "cd tinymails",
+  "npm install",
+  "npm start",
+];
+
+const questions = [
+  { q: "Which agents can use it?", a: "Any agent that can run commands on your computer. Agents that run in the cloud cannot reach it." },
+  { q: "Is there an MCP server?", a: "Not yet. Today your agent calls a local HTTP API.", link: { href: "/agent-guide.md", text: "Read the agent guide" } },
+  { q: "Can my agent send without me?", a: "The prompt tells it to stop after the test. TinyMails does not enforce that yet." },
+  { q: "Does the queue restart by itself?", a: "No. At the daily cap it pauses, and you press Start the next day." },
+];
+
+// The safety picture: three nodes inside "Your computer" (drawn by the page under the diagram) and
+// Gmail outside it; the only line that leaves the box is the one to Gmail.
+const diagram = {
+  layout: "free",
+  alt: "Inside your computer the agent sends one request to TinyMails, which keeps contacts, history and tokens there. The only line that leaves the computer goes to Gmail, with a send-only permission.",
+  ground: "none",
+  motion: { cycle: 3.2 },
+  nodes: [
+    { id: "agent", label: "Agent", icon: "ui:terminal", sub: "one request", at: [0.13, 0.36], atCompact: [0.34, 0.2] },
+    { id: "app", label: "TinyMails", icon: "/assets/icons/tinymails.svg", sub: "127.0.0.1:3210", at: [0.42, 0.36], atCompact: [0.34, 0.5] },
+    { id: "data", label: "Contacts, history, tokens", icon: "ui:database", at: [0.42, 0.78], atCompact: [0.34, 0.8] },
+    { id: "gmail", label: "Gmail", icon: "gmail", sub: "send only", at: [0.86, 0.36], atCompact: [0.86, 0.5] },
+  ],
+  edges: [
+    { from: "agent", to: "app" },
+    { from: "app", to: "data" },
+    { from: "app", to: "gmail" },
+  ],
+  shots: [["agent>app"], ["app>data"], ["app>gmail"]],
+};
+const sections = [
+  { id: "how", label: "How it works" },
+  { id: "safety", label: "Safety" },
+  { id: "install", label: "Install" },
+  { id: "questions", label: "Questions" },
+];
+const safe = ["No inbox access", "No tracking pixels", "No automatic follow-ups", "No TinyMails account"];
+
+const steps = [
+  { id: "agent", title: "Your agent queues it", line: "One request to TinyMails on your computer. The campaign arrives paused." },
+  { id: "test", title: "The test lands in your inbox", line: "The real email, sent to you alone." },
+  { id: "start", title: "You press Start", line: "Read the test first. The campaign waits, paused." },
+  { id: "pace", title: "The queue paces itself", line: "25 a day, inside your hours, 30 to 45 seconds apart. At the cap it pauses until you press Start again." },
+];
+const visualLabel: Record<string, string> = {
+  agent: `An agent session: the request "${userRequest}", one call to TinyMails, and the answer: ${queued} queued, ${excluded.length} excluded, paused.`,
+  test: `The agent session goes on: one more call to TinyMails sends the test, and the personalised email arrives in ${senderEmail}, the only address it goes to.`,
+  start: "The paused campaign row in TinyMails. Start is pressed, the row turns to Running with Pause, and the first emails leave one at a time.",
+  pace: `The recipient list turns to Sent one row at a time and the count climbs to ${capSent} of ${queued}, then the campaign pauses: ${CAP_REASON} Start waits to be pressed again.`,
+};
+const brand = '<svg viewBox="0 0 64 44" aria-hidden="true"><g fill="currentColor" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"><path d="M55 9 L53 35 L33 27 Z"/><path d="M27 21 L39 31" stroke="#fff" stroke-width="16"/><path d="M9 9 L11 35 L33 27 Z"/><path d="M9 9 L33 27"/></g></svg>';
+const tabs = `<span class="tm-tabs" aria-hidden="true"><span class="tm-tabs__brand">${brand}</span><span class="tm-tab is-on">${icon.list}Campaigns</span><span class="tm-tab">${icon.users}Leads</span><span class="tm-tab">${icon.gear}Settings</span></span>`;
+const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i></span><span class="tm-url">127.0.0.1:3210</span></div>`;
+---
+<!doctype html>
+<html lang="en" data-type="software" data-radius="soft" data-buttons="pill" data-ground="sky" data-motion>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={`${origin}/`} />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="site-kind" content="software" />
+    <meta name="page-type" content="software" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TinyMails" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={`${origin}/`} />
+    <meta property="og:image" content={`${origin}/og.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TinyMails, a Gmail outbox for your agent: the TinyMails window sending a small campaign one message at a time." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={`${origin}/og.png`} />
+    <link rel="preload" href={manropeUrl} as="font" type="font/woff2" crossorigin />
+    <style set:html={`
+      @font-face { font-family: "Manrope"; font-style: normal; font-display: swap; font-weight: 200 800; src: url(${manropeUrl}) format("woff2"); }
+      @font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 400; src: url(${monoUrl}) format("woff2"); }
+    `} />
+    <link rel="stylesheet" href="/assets/system.css" />
+    <link rel="stylesheet" href="/assets/ui/cards.css" />
+    <link rel="stylesheet" href="/assets/motion/motion.css" />
+    <link rel="stylesheet" href="/assets/backgrounds/backgrounds.css" />
+    <link rel="stylesheet" href="/assets/layout/layout.css" />
+    <link rel="stylesheet" href="/assets/icons/icon.css" />
+    <link rel="stylesheet" href="/assets/diagrams/diagram.css" />
+    <style is:inline>
+      /* start.mjs brand --page software --bg #FFFFFF --ink #15233B --accent #2463EB --surface #EAF2FF --type manrope --radius soft (kept as printed) */
+      :root {
+        --p-bg: #ffffff; --p-surface: #eaf2ff; --p-ink: #15233b; --p-muted: #5d697b;
+        --p-accent: #2463eb; --p-accent-ink: #ffffff; --p-action: #2463eb; --p-action-ink: #ffffff;
+        --p-inv-bg: #15233b; --p-inv-surface: #223047; --p-inv-ink: #ffffff; --p-inv-muted: #9da4b0;
+        --p-inv-accent: #ffffff; --p-inv-accent-ink: #15233b; --p-inv-action: #ffffff; --p-inv-action-ink: #15233b;
+        --font-display: "Manrope", system-ui, sans-serif;
+        --font-text: "Manrope", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        --display-weight: 500;
+        --display-tracking: -0.035em;
+        --display-tracking-xl: -0.045em;
+        --ly-scale: 0.97;
+      }
+    </style>
+    <script is:inline>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
+    <script is:inline src="/assets/backgrounds/backgrounds.js"></script>
+    <script is:inline>document.documentElement.classList.add('mo-js');setTimeout(()=>document.documentElement.classList.add('mo-safe'),2500)</script>
+    <link rel="modulepreload" href="/assets/moments/moments.js" />
+    <link rel="modulepreload" href="/assets/moments/lib.js" />
+    <link rel="modulepreload" href="/assets/moments/pinned-chapters/moment.js" />
+  </head>
+  <body>
+    <!-- type: software (site-kind software)
+         deal: hero centred (deal.mjs, dealt again for v3; v2 had split), palette: the client's own colours through
+         start.mjs brand (white, ink #15233B, cobalt #2463EB, sky #EAF2FF), type manrope (Manrope + JetBrains Mono),
+         effect grain-gradient (effects.mjs; here the hero's cobalt stage, drawn and held under the live window),
+         nav nav-cards (waived: the owner's morphing nav), footer footer-columns, close close-word, rhythm space,
+         buttons pill, mark wordmark (replaced by the client's own mark), ground sky
+         moments: counter-rolls dealt; replaced by pinned-chapters in #how at the owner's request -->
+    <header class="nav tm-nav" data-nav>
+      <div class="wrap nav__bar">
+        <a class="skip-link" href="#top">Skip to content</a>
+        <a class="nav__logo" href="#top" aria-label="TinyMails, back to the top"><Mark class="tm-mark" /><span class="tm-name">TinyMails</span></a>
+        <nav class="nav__links" aria-label="Main">
+          {sections.map((x) => (<div class="nav__item"><a class="nav__link" href={`#${x.id}`} data-sec={x.id}>{x.label}</a></div>))}
+        </nav>
+        <div class="nav__actions">
+          <a class="nav__link tm-nav__gh" href={github}>GitHub</a>
+          <a class="btn btn--primary" href="#install" data-copy>Copy the agent prompt</a>
+        </div>
+        <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+        </button>
+      </div>
+      <!-- the floating pill (the owner's nav): shown once the hero's buttons have gone, docked away at the close;
+           it appears and leaves by opacity and transform only, so nothing on the page shifts -->
+      <div class="tm-float" data-pill>
+        <div class="tm-float__bar">
+          <a class="tm-float__mark" href="#top" aria-label="TinyMails, back to the top"><Mark class="tm-mark" /></a>
+          <nav class="tm-float__links" aria-label="Sections">
+            {sections.map((x) => (<a class="nav__link" href={`#${x.id}`} data-sec={x.id}>{x.label}</a>))}
+          </nav>
+          <div class="tm-now" aria-hidden="true"><span class="tm-now__label" data-now-label>{sections[0].label}</span><span class="tm-now__track"><span class="tm-now__fill" data-now-fill></span></span></div>
+          <a class="btn btn--primary tm-float__cta" href="#install" data-copy>Copy the agent prompt</a>
+          <button class="tm-float__menu" type="button" aria-label="Menu" data-pill-menu>
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero hero--centred tm-hero" data-enter aria-labelledby="hero-h">
+        <div class="wrap">
+          <div class="hero-text">
+            <div class="hero__c">
+              <h1 id="hero-h">A Gmail outbox for your agent.</h1>
+              <p class="hero__lead">Your agent queues the emails. You press Start. Gmail sends them under a daily cap.</p>
+              <div class="btn-row">
+                <a class="btn btn--primary" href="#install" data-copy>Copy the agent prompt<Fragment set:html={arrow} /></a>
+                <a class="btn btn--secondary" href={github}>View on GitHub</a>
+              </div>
+            </div>
+            <div
+              class="hero__window tm-stage"
+              data-fx="grain-gradient"
+              data-fx-seed="11"
+              data-fx-palette='{"bg":"#1f57dc","surface":"#2a6af0","ink":"#0f2a7a","accent":"#5b8eff"}'
+              data-fx-params='{"speed":0,"grainMotion":0,"softness":0.7,"grain":0.42,"scatter":0.55,"tint":0.55,"contrast":0.42,"calm":0.35,"calmX":0.5,"calmY":0.45,"warp":0.5}'
+              role="img"
+              aria-label={`Your agent has queued ${queued} emails. The TinyMails window on your computer sends the ${demoCampaign.name} campaign one message at a time to your Gmail, ${DEFAULT_RULES.delayMinSeconds} to ${DEFAULT_RULES.delayMaxSeconds} seconds apart, and pauses at ${cap}: ${CAP_REASON}`}
+            >
+              <div class="tm-flow ui" aria-hidden="true" data-hero data-state="still">
+                <div class="tm-chip tm-chip--agent" data-hero-agent>
+                  <span class="tm-chip__icon tm-chip__icon--ink" set:html={icon.term} />
+                  <span class="tm-chip__text"><b>Agent</b><span><b>{queued}</b> queued</span></span>
+                </div>
+                <div class="tm-track tm-track--in" data-track-in><i></i></div>
+                <div class="tm-win tm-flow__win" data-hero-win>
+                  <Fragment set:html={bar} />
+                  <div class="tm-win__body">
+                    <ul class="tm-limits">
+                      <li><b>{cap}</b> a day</li>
+                      <li class="tm-limits__hours">{hours}</li>
+                      <li><b>{DEFAULT_RULES.delayMinSeconds} to {DEFAULT_RULES.delayMaxSeconds}</b> seconds apart</li>
+                    </ul>
+                    <div class="tm-card">
+                      <div class="tm-row" data-hero-row>
+                        <span class="tm-row__main">
+                          <span class="tm-row__name">{demoCampaign.name}</span>
+                          <span class="tm-row__meta"><span data-hero-status>Running</span> · <b data-hero-sent>{HERO_SENT}</b>/{queued} sent</span>
+                          <span class="tm-row__reason" data-hero-reason hidden>{CAP_REASON}</span>
+                        </span>
+                        <span class="tm-row__cap">{cap}/day</span>
+                        <span class="tm-btn tm-btn--sec" data-hero-btn><span class="tm-btn__ic" set:html={icon.pause} /><span data-hero-btn-label>Pause</span></span>
+                      </div>
+                      <div class="tm-progress"><span data-hero-bar style={`--p:${HERO_SENT / queued}`}></span><i style={`--c:${cap / queued}`}></i></div>
+                      <table class="tm-table">
+                        <thead><tr><th>Recipient</th><th>Status</th><th>Result</th></tr></thead>
+                        <tbody data-hero-rows>
+                          {heroRows.map((r) => (
+                            <tr class={r.sent ? "is-sent" : ""}>
+                              <td>{r.email}</td>
+                              <td><span class="tm-pill">{r.sent ? "Sent" : "Pending"}</span></td>
+                              <td>{r.at}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div class="tm-track tm-track--out" data-track-out><i></i></div>
+                <div class="tm-chip tm-chip--gmail" data-hero-gmail>
+                  <span class="tm-chip__icon"><img src="/assets/icons/gmail.svg" alt="" width="24" height="18" /></span>
+                  <span class="tm-chip__text"><b>Your Gmail</b><span><b data-hero-inbox>{HERO_SENT}</b> sent</span></span>
+                </div>
+                <span class="tm-fly" data-hero-fly><span class="tm-fly__still" set:html={envelope} /></span>
+              </div>
+            </div>
+          </div>
+          <ul class="tm-facts" aria-label="Facts">
+            <li>v0.1.0</li>
+            <li>Runs on your computer</li>
+            <li>Send-only Gmail access</li>
+            <li>AGPL-3.0</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="how" style="--h: 2" data-moment="pinned-chapters" aria-labelledby="how-h">
+        <div class="wrap mo-pc__grid">
+          <div class="mo-pc__text">
+            <h2 id="how-h">From prompt to sent mail</h2>
+            <ol class="mo-pc__steps">
+              {steps.map((s, n) => (
+                <li class="mo-pc__step" data-step={s.id}>
+                  <h3><span class="tm-step-n" aria-hidden="true">{n + 1}</span>{s.title}</h3>
+                  <p>{s.line}</p>
+                  <figure class="mo-pc__visual tm-vis" data-play={s.id} role="img" aria-label={visualLabel[s.id]}>
+                    <div class="tm-scene ui" aria-hidden="true">
+                      {s.id === "agent" && (
+                        <div class="tm-agent">
+                          <div class="tm-agent__head"><span class="tm-agent__icon" set:html={icon.term} /><span>Agent</span><span class="tm-agent__dir">~/partners</span></div>
+                          <div class="tm-agent__body">
+                            <div class="tm-bubble" data-type={userRequest}>{userRequest}</div>
+                            <div class="tm-call" data-call>
+                              <span class="tm-call__state"><span class="tm-spin"></span><span class="tm-tick" set:html={icon.check} /></span>
+                              <span class="tm-call__verb">POST</span><span class="tm-call__path">127.0.0.1:3210/api/campaigns</span>
+                              <span class="tm-call__code">201</span>
+                            </div>
+                            <div class="tm-result" data-result>
+                              <div class="tm-result__head"><b>{queued} queued, {excluded.length} excluded</b><span class="tm-badge">Paused</span></div>
+                              <ul class="tm-result__list">
+                                {excluded.map((x) => (<li><span>{x.email}</span><span class="tm-tag">{x.reason}</span></li>))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {s.id === "test" && (
+                        <div class="tm-duo">
+                          <div class="tm-agent tm-agent--short">
+                            <div class="tm-agent__head"><span class="tm-agent__icon" set:html={icon.term} /><span>Agent</span><span class="tm-agent__dir">~/partners</span></div>
+                            <div class="tm-agent__body">
+                              <div class="tm-call tm-call--done"><span class="tm-call__state"><span class="tm-tick tm-tick--on" set:html={icon.check} /></span><span class="tm-call__verb">POST</span><span class="tm-call__path">/api/campaigns</span><span class="tm-call__code">201</span></div>
+                              <div class="tm-call" data-call>
+                                <span class="tm-call__state"><span class="tm-spin"></span><span class="tm-tick" set:html={icon.check} /></span>
+                                <span class="tm-call__verb">POST</span><span class="tm-call__path">/api/campaigns/…/test-send</span>
+                                <span class="tm-call__code">200</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="tm-mail" data-mail>
+                            <div class="tm-mail__head"><span class="tm-mail__icon" set:html={icon.inbox} /><span>Inbox</span><span class="tm-mail__to">To {senderEmail}</span></div>
+                            <div class="tm-mail__subject">{preview.subject}</div>
+                            <div class="tm-mail__body">{preview.body.split("\n").filter(Boolean).map((line) => (<p>{line}</p>))}</div>
+                          </div>
+                        </div>
+                      )}
+                      {s.id === "start" && (
+                        <div class="tm-duo">
+                          <div class="tm-win">
+                            <Fragment set:html={bar} />
+                            <div class="tm-win__body">
+                              <Fragment set:html={tabs} />
+                              <div class="tm-card">
+                                <div class="tm-row" data-start-row>
+                                  <span class="tm-row__main"><span class="tm-row__name">{demoCampaign.name}</span><span class="tm-row__meta"><span data-start-status>Running</span> · <b data-start-sent>3</b>/{queued} sent</span></span>
+                                  <span class="tm-row__cap">{cap}/day</span>
+                                  <span class="tm-btn tm-btn--sec" data-press="start"><span class="tm-btn__ic" set:html={icon.pause} /><span>Pause</span></span>
+                                </div>
+                              </div>
+                              <ul class="tm-out" data-out>
+                                {recipients.slice(0, 3).map((r) => (<li class="is-sent"><span class="tm-out__env" set:html={envelope} /><span class="tm-out__to">{r.email}</span><span class="tm-out__at">{r.at}</span><span class="tm-pill">Sent</span></li>))}
+                              </ul>
+                            </div>
+                          </div>
+                          <span class="tm-cursor" data-cursor></span>
+                        </div>
+                      )}
+                      {s.id === "pace" && (
+                        <div class="tm-win tm-win--pace">
+                          <Fragment set:html={bar} />
+                          <div class="tm-win__body">
+                            <div class="tm-card">
+                              <div class="tm-row tm-row--pace is-paused" data-pace-row>
+                                <span class="tm-row__main">
+                                  <span class="tm-row__name">{demoCampaign.name}</span>
+                                  <span class="tm-row__meta"><span data-pace-status>Paused</span> · <b data-pace-sent>{capSent}</b>/{queued} sent</span>
+                                  <span class="tm-row__reason" data-pace-reason>{CAP_REASON}</span>
+                                </span>
+                                <span class="tm-row__cap">{cap}/day</span>
+                                <span class="tm-btn tm-btn--pri" data-pace-btn><span class="tm-btn__ic" set:html={icon.play} /><span data-pace-btn-label>Start</span></span>
+                              </div>
+                              <div class="tm-progress tm-progress--cap"><span data-pace-bar style={`--p:${capSent / queued}`}></span><i style={`--c:${cap / queued}`}></i></div>
+                              <table class="tm-table">
+                                <thead><tr><th>Recipient</th><th>Status</th><th>Result</th></tr></thead>
+                                <tbody data-pace-rows>
+                                  {paceRows.map((r) => (
+                                    <tr class={r.sent ? "is-sent" : ""}>
+                                      <td>{r.email}</td>
+                                      <td><span class="tm-pill">{r.sent ? "Sent" : "Pending"}</span></td>
+                                      <td>{r.at}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <p class="tm-rules">{rules}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </figure>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div class="mo-pc__visuals frame"></div>
+        </div>
+      </section>
+
+      <section class="section" id="safety" aria-labelledby="safety-h">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="safety-h">Stored on your computer</h2>
+            <p>TinyMails keeps contacts, history and tokens local. Gmail gets the emails you send. Your agent sees what you give it.</p>
+          </div>
+          <div class="grid tm-safety fill">
+            <ul class="tm-nots">
+              {safe.map((s) => (<li><span class="tm-nots__icon" set:html={icon.no} />{s}</li>))}
+            </ul>
+            <div class="panel tm-diagram">
+              <div class="tm-computer" aria-hidden="true"><span class="tm-computer__label">Your computer</span></div>
+              <div class="dg" data-diagram><script type="application/json" set:html={JSON.stringify(diagram)} /></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="install" aria-labelledby="install-h">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="install-h">Start with one prompt</h2>
+          </div>
+          <div class="panel frame tm-install">
+          <div class="tm-code ground-inverse">
+            <div class="tm-code__bar">
+              <div class="tabs tm-code__tabs" role="tablist" aria-label="How to install">
+                <button class="tab" role="tab" id="tab-prompt" aria-controls="panel-prompt" aria-selected="true" type="button">Agent prompt</button>
+                <button class="tab" role="tab" id="tab-hand" aria-controls="panel-hand" aria-selected="false" tabindex="-1" type="button">By hand</button>
+              </div>
+              <a class="btn btn--primary tm-code__copy" href="#panel-prompt" data-copy data-copy-tab>Copy the agent prompt</a>
+            </div>
+            <div class="tm-code__panel" role="tabpanel" id="panel-prompt" aria-labelledby="tab-prompt" tabindex="0">
+              <pre data-prompt set:html={promptHtml} />
+              <button class="tm-code__more" type="button" data-prompt-more aria-expanded="false" hidden>Show the whole prompt</button>
+            </div>
+            <div class="tm-code__panel" role="tabpanel" id="panel-hand" aria-labelledby="tab-hand" tabindex="0" hidden>
+              <pre data-hand={hand.join("\n")}>{hand.map((line) => (<span class="tm-code__line"><span class="tm-code__ps" aria-hidden="true">$</span>{line}{"\n"}</span>))}</pre>
+            </div>
+          </div>
+          </div>
+          <p class="visually-hidden" aria-live="polite" data-announce></p>
+          <p class="tm-note">Needs Node.js 22 and a Google OAuth client you create once. <a class="link" href="https://github.com/Gauthi3r/tinymails#connect-gmail">Read the setup steps</a></p>
+        </div>
+      </section>
+
+      <section class="section" id="questions" aria-labelledby="questions-h">
+        <div class="wrap">
+          <div class="grid tm-qa">
+            <h2 id="questions-h">Questions</h2>
+            <dl class="tm-qa__list">
+              {questions.map((item) => (
+                <div class="tm-qa__item">
+                  <dt><span class="tm-qa__icon" aria-hidden="true" set:html={icon.ask} />{item.q}</dt>
+                  <dd>{item.a}{item.link && (<Fragment> <a class="link" href={item.link.href}>{item.link.text}</a></Fragment>)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer closing" id="contact" aria-labelledby="close-h">
+      <div class="wrap">
+        <div class="closing__cta close--word">
+          <div class="tm-close__row">
+            <p class="tm-close__line">Free and open source under AGPL-3.0.</p>
+            <a class="btn btn--primary" href="#install" data-copy>Copy the agent prompt<Fragment set:html={arrow} /></a>
+          </div>
+          <h2 id="close-h" class="close__word">TinyMails</h2>
+        </div>
+        <div class="closing__links">
+          <div class="tm-foot">
+            <ul class="tm-foot__links">
+              <li><a href={github}>GitHub</a></li>
+              <li><a href="https://github.com/Gauthi3r/tinymails/issues">Report an issue</a></li>
+              <li><a href="/agent-guide.md">Agent guide</a></li>
+            </ul>
+            <p>A project by Gauthier</p>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script type="module" is:inline src="/assets/system.js"></script>
+    <script type="module" is:inline src="/assets/motion/motion.js"></script>
+    <script type="module" is:inline src="/assets/layout/layout.js"></script>
+    <script type="module" is:inline src="/assets/diagrams/mount.js"></script>
+    <script>
+      import "../scripts/page.ts";
+    </script>
+  </body>
+</html>

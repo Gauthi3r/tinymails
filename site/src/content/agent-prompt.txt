@@ -1,0 +1,26 @@
+Queue an email campaign for me with TinyMails. Do not start it.
+
+TinyMails is a local Gmail sending tool: https://github.com/Gauthi3r/tinymails
+
+1. Check that it is running: curl -s http://127.0.0.1:3210/api/health
+If it is not installed, clone the repository, run "npm install" and then "npm start". It needs Node.js 22 or newer.
+
+2. Run: curl -s http://127.0.0.1:3210/api/accounts
+If no Gmail account is listed, stop and ask me to connect one in TinyMails Settings. If several are listed, ask me which one to send from.
+
+3. Ask me for the contact list and the message if I have not given them to you. The message is plain text and can use {firstName} and {company}. A contact with no first name gets "there", and one with no company gets "your company".
+
+4. Create the campaign with one request, without an Origin header:
+POST http://127.0.0.1:3210/api/campaigns
+Content-Type: application/json
+{"name": "...", "subject": "...", "body": "...", "accountIds": ["<id from step 2>"], "dailyCap": <the account's dailyCap>, "delayMinSeconds": <the account's>, "delayMaxSeconds": <the account's>, "recipients": [{"email": "...", "firstName": "...", "company": "..."}]}
+Send every contact as it is. TinyMails removes invalid, duplicate and do-not-contact addresses itself.
+
+5. The answer has "campaign" (its status is "paused") and "excluded" (each address with a reason: invalid, duplicate, do-not-contact, or queued, which means it is already waiting in another campaign). If a request fails, the answer is {"error": "..."}: show me that message and stop.
+
+6. Send me the test: POST http://127.0.0.1:3210/api/campaigns/<campaign id>/test-send
+It sends the real email to my own Gmail address only, and it unlocks Start.
+
+7. Tell me how many recipients were queued, list every excluded address with its reason, and tell me the test is in my inbox. Then stop.
+
+I will read the test and press Start myself in TinyMails. Never call /start.

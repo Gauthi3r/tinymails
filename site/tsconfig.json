@@ -1,0 +1,13 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@product/*": ["../src/*"],
+      "node:crypto": ["./src/sim/crypto-shim.ts"]
+    },
+    "types": []
+  },
+  "include": [".astro/types.d.ts", "src", "*.ts", "*.mjs"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,18 @@
+---
+// The TinyMails mark, redrawn flat: an M that is also an envelope. Two
+// rounded lobes meet in the middle; the left lobe's band folds over the right
+// one, shown by a thin cut of ground colour.
+interface Props {
+  class?: string;
+  cut?: string;
+}
+const { class: className, cut = "var(--white)" } = Astro.props;
+---
+<svg class={className} viewBox="0 0 64 44" aria-hidden="true" focusable="false">
+  <g fill="currentColor" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M55 9 L53 35 L33 27 Z" />
+    <path d="M27 21 L39 31" stroke={cut} stroke-width="16" />
+    <path d="M9 9 L11 35 L33 27 Z" />
+    <path d="M9 9 L33 27" />
+  </g>
+</svg>

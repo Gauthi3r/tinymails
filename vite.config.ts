@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export const apiProxy = {
   target: "http://127.0.0.1:3210",
@@ -19,5 +19,7 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
+    // The marketing site in site/ has its own Vitest config and dependencies.
+    exclude: [...configDefaults.exclude, "site/**"],
   },
 });
