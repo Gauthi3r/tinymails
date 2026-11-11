@@ -1,4 +1,4 @@
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { mkdtemp } from "node:fs/promises";
 import type { Server } from "node:http";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Account } from "../src/domain/types";
 import { FakeGmailAccountAdapter } from "../src/gmail/fake-adapter";
+import { createOutboxServer } from "../src/mcp/server";
 import { createApp } from "../src/server/app";
 import { createRepositories, type Repositories } from "../src/server/repositories";
 
@@ -251,6 +252,25 @@ describe("MCP connection", () => {
 
     expect((await client.listTools()).tools).toHaveLength(6);
     expect(data.accounts).toEqual([expect.objectContaining({ email: "sender@example.com" })]);
+  }, 30_000);
+
+  it("tells the agent when TinyMails is not running", async () => {
+    const offline = await createOutboxServer({
+      baseUrl: "http://127.0.0.1:3210",
+      version: "test",
+      fetcher: async () => { throw new TypeError("fetch failed"); },
+    });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await offline.connect(serverSide);
+    const client = new Client({ name: "test-agent", version: "1.0.0" });
+    await client.connect(clientSide);
+    clients.push(client);
+
+    const result = await call(client, "list_accounts");
+
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain("start_campaign");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("TinyMails is not running at http://127.0.0.1:3210");
   });
 
   it("refuses a browser page on another origin", async () => {

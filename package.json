@@ -22,6 +22,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -p tsconfig.test.json",
     "serve": "tsx src/server/index.ts",
+    "mcp": "node scripts/mcp.mjs",
     "lint": "oxlint .",
     "test": "vitest",
     "scan": "node scripts/scan-public.mjs",
