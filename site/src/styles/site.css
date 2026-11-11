@@ -21,102 +21,126 @@
   --white: #ffffff;
   /* the h2 a step larger than the kit's 48, one scale for every section */
   --t-h2: clamp(32px, 2.29vw + 23px, 56px);
-  scroll-padding-bottom: 104px;   /* the floating nav never covers a focused control */
 }
 /* the page's lit ground (data-ground="sky", dealt) in the brand's own tints: sky, white, a touch of cobalt */
 html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --ground-ink: #15233b; --ground-muted: #5d697b; --ground-accent: #8fb2ff; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-/* ---------------------------------------------------------------- the nav: a top bar that becomes a floating pill (the owner's nav)
-   At the top it is the kit's bar. Once the hero's buttons have scrolled away the bar slides up out of
-   sight and the dark pill comes up at the bottom centre: the mark, the words, the section in view
-   with its progress, the main button (a view transition morphs one into the other, both ways). When
-   the close comes up the pill docks away, so it never lies on the footer's own button and links.
-   Both move by transform and opacity only: the header's box never moves, so nothing shifts. */
+/* ---------------------------------------------------------------- the sky (src/scripts/sky.ts) and its two tones
+   One fixed canvas behind every section draws a dithered cloud field whose colours run through a day
+   (noon, haze, clear, night, dawn, dusk), one scene per section. html[data-tone] follows the scene
+   under the screen's middle: on a dark scene the words, lines and buttons turn light. Boxes with their
+   own ground (the windows, the chapter frame, the panels) keep the brand's ink. Without the script each
+   dark section paints its own ground and carries its own tone, so the page still reads. */
+.tm-sky { position: fixed; left: 0; top: 0; z-index: -1; width: 100%; height: 100vh; height: 100lvh; pointer-events: none; }
+html.has-sky body { background: var(--sky-mid, #eef4ff); }
+html.has-sky[data-tone="dark"], html:not(.has-sky) [data-tone="dark"] {
+  --ink: #ffffff; --muted: rgb(255 255 255 / 76%); --line: rgb(255 255 255 / 18%); --line-strong: rgb(255 255 255 / 38%);
+  --accent: #b9d0ff; --action: #ffffff; --action-ink: #15233b; --bg: rgb(255 255 255 / 10%);
+}
+html:not(.has-sky) [data-tone="dark"] { color: var(--ink); background: radial-gradient(70% 60% at 50% 100%, #6f9bff 0%, transparent 70%), #2a62ea; }
+html:not(.has-sky) #install[data-tone="dark"] { background: #12244c; }
+html.has-sky body, html.has-sky :is(h1, h2, h3, p, dt, dd, .tm-facts li, .tm-nots li, .link) { transition: color 380ms ease; }
+html[data-tone="dark"] .btn--secondary { background: rgb(255 255 255 / 10%); border-color: rgb(255 255 255 / 40%); color: #fff; }
+html[data-tone="dark"] .btn--secondary:hover { background: rgb(255 255 255 / 18%); }
+:where(.tm-win, .tm-chip, .tm-vis, .mo-pc__visuals, .tm-diagram, .tm-computer) {
+  --ink: var(--p-ink); --muted: var(--p-muted); --accent: var(--p-accent); --action: var(--p-action); --action-ink: var(--p-action-ink); --bg: #ffffff;
+  --line: color-mix(in oklab, var(--p-ink) 11%, transparent); --line-strong: color-mix(in oklab, var(--p-ink) 20%, transparent);
+}
+
+/* ---------------------------------------------------------------- the nav: a clear bar that condenses into a pill (the owner's nav)
+   At the top it is a clear bar on the hero's sky: the mark, the words at the right, GitHub and the main
+   button. Over the first 140px of scroll (--np, 0 to 1, set by page.ts) a white shape grows from
+   nothing and closes in from the screen's edges to one pill at the top centre, while each part slides
+   by transform to its seat in the pill (page.ts measures the seats) and GitHub fades out. Scrolling back
+   opens it out again. The shape's fill (--nb) comes in ahead of the words' colour (--nc), which turns
+   from white to ink in one short step, so the words read at every point of the morph. In the pill a soft lozenge sits under the section in view and slides between
+   the words. Without the script it stays the kit's plain bar. */
 .tm-mark { color: var(--p-accent); --white: var(--bg); }
 .nav__logo .tm-mark { height: 22px; width: auto; }
-.tm-nav > .nav__bar { transition: transform 360ms cubic-bezier(.22, 1, .36, 1), opacity 240ms ease; }
-.tm-nav:not(.is-float) > .nav__bar, .tm-nav.is-open > .nav__bar { view-transition-name: tm-nav; }
-.tm-nav.is-float:not(.is-open) { background: transparent; border-bottom-color: transparent; pointer-events: none; }
-.tm-nav.is-float:not(.is-open) > .nav__bar { transform: translateY(-100%); opacity: 0; visibility: hidden;
-  transition: transform 360ms cubic-bezier(.22, 1, .36, 1), opacity 240ms ease, visibility 0s 360ms; }
-::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-::view-transition-group(tm-nav) { animation-duration: 440ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
-::view-transition-old(tm-nav), ::view-transition-new(tm-nav) { height: 100%; animation-duration: 280ms; }
-
-.tm-float { position: fixed; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 51; display: flex; justify-content: center;
-  padding-inline: var(--gut); pointer-events: none; visibility: hidden; opacity: 0; transform: translateY(calc(100% + 24px));
-  transition: transform 420ms cubic-bezier(.22, 1, .36, 1), opacity 260ms ease, visibility 0s 420ms; }
-.tm-nav.is-float:not(.is-docked, .is-open) .tm-float { visibility: visible; opacity: 1; transform: none; transition: transform 420ms cubic-bezier(.22, 1, .36, 1), opacity 260ms ease, visibility 0s; }
-.tm-nav.is-float:not(.is-docked, .is-open) .tm-float__bar { view-transition-name: tm-nav; }
-.tm-float__bar {
-  display: flex; align-items: center; gap: var(--s-5); max-width: 100%; height: 56px; padding: 6px 6px 6px 20px; pointer-events: auto;
-  border-radius: 999px; background: var(--p-inv-bg); color: var(--p-inv-ink);
-  --bg: var(--p-inv-bg); --ink: var(--p-inv-ink); --muted: var(--p-inv-muted); --line: rgb(255 255 255 / 14%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 18px 40px -12px rgb(21 35 59 / 45%), 0 2px 6px rgb(21 35 59 / 18%);
+.tm-nav__shape, .tm-nav__here { display: none; }
+.tm-nav.is-live {
+  --np: 0; --nb: 0; --nc: 0; background: none; border-bottom-color: transparent;
+  --ink: color-mix(in srgb, var(--p-ink) calc(var(--nc) * 100%), #ffffff);
+  --line-strong: color-mix(in srgb, rgb(21 35 59 / 18%) calc(var(--nc) * 100%), rgb(255 255 255 / 45%));
+  color: var(--ink);
 }
-.tm-float__mark { display: inline-grid; place-items: center; min-width: 44px; height: 44px; flex: none; }
-.tm-float__mark .tm-mark { height: 22px; width: auto; color: #8fb2ff; --white: var(--p-inv-bg); }
-.tm-float__links { display: flex; align-items: center; height: 44px; }
-.tm-float__links .nav__link { display: inline-flex; align-items: center; height: 44px; padding-inline: 12px; color: rgb(255 255 255 / 78%); font-size: 14px; }
-.tm-float__links .nav__link:hover, .tm-float__links .nav__link.is-here { color: #fff; }
-.tm-float__links .nav__link::before { bottom: 6px; }
-.tm-now { display: grid; gap: 7px; align-content: center; width: 148px; padding-left: var(--s-5); border-left: 1px solid rgb(255 255 255 / 14%); font-size: 14px; font-weight: 500; color: #fff; }
-.tm-now__label { white-space: nowrap; overflow: hidden; line-height: 1.1; }
-.tm-now__track { position: relative; display: block; height: 3px; border-radius: 3px; background: rgb(255 255 255 / 16%); overflow: hidden; }
-.tm-now__fill { position: absolute; inset: 0; border-radius: inherit; background: #8fb2ff; transform-origin: left; transform: scaleX(var(--p, 0)); transition: transform 160ms linear; }
-.tm-float__cta { height: 44px; flex: none; }
-.tm-float__menu { display: none; place-items: center; width: 44px; height: 44px; margin-left: auto; flex: none; border-radius: 999px; border: 1px solid rgb(255 255 255 / 22%); background: transparent; color: #fff; cursor: pointer; }
-.tm-float :is(a, button):focus-visible { outline-color: #8fb2ff; }
-@media (min-width: 1024px) and (max-width: 1279px) {
-  .tm-float__bar { gap: var(--s-3); padding-left: 14px; }
-  .tm-float__links .nav__link { padding-inline: 10px; font-size: 13.5px; }
-  .tm-now { width: 120px; padding-left: var(--s-4); }
+.tm-nav.is-live .tm-nav__shape {
+  display: block; position: absolute; z-index: 0; pointer-events: none;
+  left: calc(var(--np) * var(--sx, 0) * 1px); top: calc(var(--np) * var(--st, 12) * 1px);
+  width: calc(100% - var(--np) * (100% - var(--sw, 0) * 1px)); height: calc(var(--nav) - var(--np) * (var(--nav) - var(--sh, 56) * 1px));
+  border-radius: calc(var(--np) * var(--sh, 56) * 0.5px);
+  background: rgb(255 255 255 / calc(var(--nb) * 0.84));
+  box-shadow: 0 1px 0 rgb(255 255 255 / calc(var(--nb) * 0.9)) inset, 0 0 0 1px rgb(21 35 59 / calc(var(--nb) * 0.07)),
+    0 2px 4px rgb(10 30 90 / calc(var(--nb) * 0.06)), 0 18px 40px -16px rgb(10 30 90 / calc(var(--nb) * 0.38));
 }
-@media (max-width: 1023px) {
-  .tm-float__bar { gap: var(--s-3); padding-left: 10px; }
-  .tm-float__links { display: none; }
-  .tm-now { border-left: 0; padding-left: var(--s-2); width: 150px; }
-  .tm-float__menu { display: inline-grid; }
+.tm-nav.is-live.is-glass .tm-nav__shape { -webkit-backdrop-filter: blur(16px) saturate(1.6); backdrop-filter: blur(16px) saturate(1.6); }
+.tm-nav.is-live > .nav__bar { position: relative; z-index: 1; }
+.tm-nav.is-live [data-part] { transform: translate(calc(var(--np) * var(--dx, 0) * 1px), calc(var(--np) * var(--dy, 0) * 1px)); }
+.tm-nav.is-live:not(.is-open) .nav__links { flex: 0 0 auto; margin-left: auto; position: relative; }
+/* a desktop's open bar: the mark at the left line, the words in the middle of the screen, the actions at the right line */
+@media (min-width: 1024px) {
+  .tm-nav.is-live:not(.is-open) > .nav__bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .tm-nav.is-live:not(.is-open) .nav__logo { justify-self: start; }
+  .tm-nav.is-live:not(.is-open) .nav__links { margin-left: 0; }
+  .tm-nav.is-live:not(.is-open) .nav__actions { justify-self: end; }
 }
+.tm-nav.is-live .nav__actions { gap: var(--s-2); }
+.tm-nav.is-live .tm-nav__gh { opacity: max(0, calc(1 - var(--np) * 2.4)); }
+.tm-nav.is-live.is-pill .tm-nav__gh { visibility: hidden; }
+.tm-nav.is-live .nav__logo .tm-mark { color: color-mix(in srgb, var(--p-accent) calc(var(--nc) * 100%), #ffffff); --white: color-mix(in srgb, #ffffff calc(var(--nb) * 100%), #2a62ea); }
+.tm-nav.is-live .tm-nav__cta { background: color-mix(in srgb, var(--p-action) calc(var(--nc) * 100%), #ffffff); color: color-mix(in srgb, #ffffff calc(var(--nc) * 100%), var(--p-ink)); }
+.tm-nav.is-live .tm-nav__cta:hover { background: color-mix(in srgb, var(--p-ink) calc(var(--nc) * 100%), #e8efff); }
+.tm-nav.is-live .tm-nav__cta.is-copied { background: var(--p-ink); color: #fff; }
+.tm-nav.is-live .nav__toggle { color: var(--ink); border-color: var(--line-strong); }
+/* the lozenge under the section in view, in the pill only */
+.tm-nav.is-live .tm-nav__here {
+  display: block; position: absolute; z-index: -1; left: 0; top: 50%; width: calc(var(--hw, 0) * 1px); height: 36px; margin-top: -18px;
+  border-radius: 999px; background: rgb(21 35 59 / 7%); opacity: 0; transform: translateX(calc(var(--hx, 0) * 1px));
+  transition: transform 520ms cubic-bezier(.22, 1, .36, 1), width 520ms cubic-bezier(.22, 1, .36, 1), opacity 260ms ease;
+}
+.tm-nav.is-live.is-pill .tm-nav__here.is-on { opacity: 1; }
+.tm-nav.is-live .tm-nav__here.is-jump { transition: opacity 260ms ease; }
+.tm-nav.is-live .nav__link.is-here { color: var(--p-ink); }
+.tm-nav.is-live.is-pill .nav__link::before { display: none; }
+/* the phone sheet: the plain white bar again, every part back in its place */
+.tm-nav.is-live.is-open { --np: 0 !important; --nb: 0 !important; --nc: 1 !important; background: #fff; --ink: var(--p-ink); --bg: #fff; --line: color-mix(in oklab, var(--p-ink) 11%, transparent); --line-strong: color-mix(in oklab, var(--p-ink) 20%, transparent); }
+.tm-nav.is-live.is-open .tm-nav__shape { display: none; }
+.tm-nav.is-live.is-open .nav__logo .tm-mark { color: var(--p-accent); --white: #fff; }
+.tm-nav.is-live.is-open .tm-nav__cta { background: var(--p-action); color: #fff; }
+.tm-nav.is-live.is-open .nav__links { margin-left: 0; }
 @media (max-width: 639px) {
-  :root { scroll-padding-bottom: 92px; }
-  .tm-float__bar { width: 100%; }
-  .tm-now { flex: 1; width: auto; min-width: 0; }
-  .tm-float__cta { display: none; }
-  /* the top bar keeps the mark and the menu; the hero's own button sits just under it */
-  .tm-nav .nav__actions .btn { display: none; }
+  /* the bar keeps the mark and the menu; the hero's own button sits just under it */
+  .tm-nav:not(.is-open) .nav__actions .btn { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tm-nav > .nav__bar, .tm-nav.is-float:not(.is-open) > .nav__bar, .tm-float, .tm-nav.is-float:not(.is-docked, .is-open) .tm-float { transition: none; }
-  .tm-nav > .nav__bar, .tm-float__bar { view-transition-name: none !important; }
+  .tm-nav.is-live .tm-nav__here { transition: opacity 200ms ease; }
 }
 
 /* ---------------------------------------------------------------- buttons that copy */
 [data-copy].is-copied { background: var(--p-ink); border-color: var(--p-ink); }
-.tm-float [data-copy].is-copied { background: #fff; color: var(--p-ink); }
 
 /* ---------------------------------------------------------------- the hero (centred, dealt): the headline owns the top,
-   then one wide cobalt stage tells the product left to right: the agent's queue, the TinyMails window
-   sending, and Gmail, with tiny envelopes travelling one at a time */
+   then the product tells itself left to right straight on the noon sky: the agent's queue, the
+   TinyMails window sending, and Gmail, with tiny envelopes travelling one at a time. As the hero
+   scrolls away (--hp, 0 to 1, page.ts) the words drift up and fade and the window lifts a little. */
 .tm-hero h1 { max-width: none; font-size: calc(var(--ly-scale) * clamp(40px, 6.2vw + 5px, 96px)); line-height: 1; letter-spacing: -0.05em; }
 .tm-hero .hero__c { max-width: none; gap: var(--s-4); }
 .tm-hero .hero__lead { max-width: 44ch; color: var(--ink); }
 .tm-hero .btn-row { margin-top: var(--s-2); }
 .tm-hero.hero--centred .hero__window.tm-stage {
-  -webkit-mask-image: none; mask-image: none; margin-top: var(--s-6); min-height: 248px;
-  border-radius: 28px; background: var(--tm-cobalt-deep); isolation: isolate;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 25%) inset, 0 30px 60px -36px rgb(21 35 59 / 55%);
+  -webkit-mask-image: none; mask-image: none; margin-top: var(--s-5); min-height: 248px; isolation: isolate;
+  background: none; border: 0; box-shadow: none; overflow: visible;
 }
-.tm-stage > canvas { z-index: 0; border-radius: inherit; }
-/* the still ground for no script, reduced motion and a refused canvas: the same cobalt field */
-.tm-stage::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
-  background: radial-gradient(60% 80% at 22% 10%, #3a7bff 0%, transparent 70%), radial-gradient(50% 70% at 85% 95%, #1544b8 0%, transparent 70%), var(--tm-cobalt); }
+.tm-hero .hero__c { transform: translateY(calc(var(--hp, 0) * -64px)); opacity: calc(1 - var(--hp, 0) * 1.25); }
+.tm-hero .tm-stage { transform: translateY(calc(var(--hp, 0) * -28px)); }
+.tm-hero .tm-facts { opacity: calc(1 - var(--hp, 0) * 1.6); }
+.tm-hero :is(h1, .hero__lead) { text-shadow: 0 2px 24px rgb(10 40 140 / 22%); }
 
 .tm-flow {
   position: absolute; inset: 0; z-index: 1; display: grid; align-items: center;
   grid-template-columns: minmax(150px, 196px) minmax(40px, 1fr) minmax(0, 660px) minmax(40px, 1fr) minmax(150px, 196px);
-  padding: 32px 40px;
+  padding: 4px 40px;
 }
 .tm-flow__win { grid-column: 3; align-self: stretch; min-height: 0; }
 .tm-chip {
@@ -156,7 +180,19 @@ html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --gro
 .tm-flow:not([data-state="still"]) .tm-fly__still { display: none; }
 
 /* the window in the hero: the campaign row, its bar and the recipients turning to Sent */
-.tm-hero .tm-win { box-shadow: var(--tm-float); border-color: rgb(255 255 255 / 40%); }
+/* the glass rim round every embedded screen: a clear band that blurs the sky behind it, brighter
+   along its top edge. It is the window's own border (the fill stops at the padding box), so its corners
+   follow the window's and the screen inside keeps its size and clipping. Clearer on the dark noon
+   sky (22%), milkier on the light scenes (60%). */
+.tm-hero .tm-win.tm-flow__win, .tm-scene :is(.tm-agent, .tm-mail, .tm-win) {
+  border: 10px solid rgb(255 255 255 / 22%); border-top-color: rgb(255 255 255 / 38%); background-clip: padding-box;
+  -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4); border-radius: 26px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 26%), 0 2px 6px rgb(8 30 100 / 10%), 0 34px 64px -30px rgb(8 30 100 / 50%);
+}
+.tm-scene :is(.tm-agent, .tm-mail, .tm-win) { border-width: 8px; border-color: rgb(255 255 255 / 60%); border-top-color: rgb(255 255 255 / 92%); border-radius: 26px;
+  box-shadow: 0 0 0 1px rgb(21 35 59 / 6%), 0 24px 48px -28px rgb(21 35 59 / 30%); }
+.tm-scene .tm-mail { border-radius: 24px; }
+@media (max-width: 639px) { .tm-hero .tm-win.tm-flow__win { border-width: 6px; border-radius: 22px; } }
 .tm-flow__win .tm-win__body { gap: 12px; padding: 12px 16px 0; overflow: hidden; }
 .tm-flow__win .tm-card { border-radius: 16px 16px 0 0; border-bottom: 0; }
 .tm-flow__win .tm-table tbody tr:nth-child(n+7) { display: none; }
@@ -176,11 +212,19 @@ html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --gro
   font-size: 15px; font-weight: 500; color: var(--ink);
 }
 .tm-facts li { display: flex; align-items: center; gap: 10px; }
-.tm-facts li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--p-accent); flex: none; }
+/* on the sky the facts ride in small dark glass pills, readable over the deep blue and the white clouds alike
+   (a phone leaves them out, as before, to keep the hero to one screen) */
+@media (min-width: 640px) {
+html.has-sky .tm-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+html.has-sky .tm-facts li { padding: 8px 16px 8px 14px; border-radius: 999px; color: #fff; background: rgb(14 44 150 / 42%);
+  border: 1px solid rgb(255 255 255 / 18%); -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4); }
+html.has-sky .tm-facts li::before { background: #b9d0ff; }
+}
+.tm-facts li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
 .tm-hero > .wrap { row-gap: var(--s-5); }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
-  .tm-flow { grid-template-columns: minmax(124px, 164px) minmax(28px, 1fr) minmax(0, 560px) minmax(28px, 1fr) minmax(124px, 164px); padding: 24px 28px; }
+  .tm-flow { grid-template-columns: minmax(124px, 164px) minmax(28px, 1fr) minmax(0, 560px) minmax(28px, 1fr) minmax(124px, 164px); padding: 4px 28px; }
   .tm-chip { padding: 10px 12px 10px 10px; gap: 10px; }
   .tm-chip__icon { width: 34px; height: 34px; }
   .tm-fly__still { right: calc(164px + 28px + (100% - 56px - 328px - 560px) / 4); }
@@ -188,7 +232,7 @@ html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --gro
 /* below 1024 the stage stacks: the agent, the window, Gmail, and the envelopes drop down to Gmail */
 @media (max-width: 1023px) {
   .tm-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--s-3); font-size: 14px; }
-  .tm-flow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 24px minmax(0, 1fr) 24px auto; justify-items: center; padding: 24px; }
+  .tm-flow { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 24px minmax(0, 1fr) 24px auto; justify-items: center; padding: 8px 24px; }
   .tm-chip--agent, .tm-chip--gmail, .tm-flow__win, .tm-track { grid-column: 1; }
   .tm-chip--agent { grid-row: 1; } .tm-track--in { grid-row: 2; } .tm-flow__win { grid-row: 3; width: min(100%, 560px); justify-self: center; }
   .tm-track--out { grid-row: 4; } .tm-chip--gmail { grid-row: 5; }
@@ -200,7 +244,7 @@ html[data-ground="sky"] { --ground-bg: #eaf2ff; --ground-surface: #ffffff; --gro
 }
 @media (max-width: 639px) {
   .tm-facts { display: none; }
-  .tm-hero.hero--centred .hero__window.tm-stage { margin-top: var(--s-5); min-height: 300px; border-radius: 22px; -webkit-mask-image: none; mask-image: none; }
+  .tm-hero.hero--centred .hero__window.tm-stage { margin-top: var(--s-5); min-height: 300px; -webkit-mask-image: none; mask-image: none; }
   .tm-flow { padding: 14px; grid-template-rows: auto 14px minmax(0, 1fr) 14px auto; }
   .tm-chip { padding: 7px 12px 7px 7px; gap: 9px; border-radius: 14px; }
   .tm-chip__icon { width: 30px; height: 30px; border-radius: 9px; }
@@ -286,8 +330,11 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 #how.is-live .mo-pc__step.is-on .tm-step-n, #how:not(.is-live) .tm-step-n { background: var(--p-accent); border-color: var(--p-accent); color: #fff; }
 #how .mo-pc__step p { padding-left: 40px; font-size: var(--t-lead); line-height: 1.5; }
 .tm-vis { position: relative; overflow: hidden; container-type: size; aspect-ratio: 4 / 3;
-  background: radial-gradient(90% 70% at 50% 0%, #f7faff 0%, transparent 70%), var(--tm-sky); }
-#how .mo-pc__visuals { border-radius: 24px; overflow: hidden; background: var(--tm-sky); padding: 0; }
+  background: radial-gradient(90% 70% at 50% 0%, rgb(255 255 255 / 70%) 0%, transparent 70%), rgb(234 242 255 / 62%); }
+/* the chapter frame is glass on the haze: the sky's dots show through, blurred */
+#how .mo-pc__visuals { border-radius: 24px; overflow: hidden; padding: 0; background: rgb(255 255 255 / 34%); border: 1px solid rgb(255 255 255 / 90%);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); box-shadow: 0 30px 70px -40px rgb(21 35 59 / 40%); }
+#how:not(.is-live) .mo-pc__visual.tm-vis { -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid rgb(255 255 255 / 90%); }
 #how .mo-pc__visual.tm-vis { border-radius: 20px; }
 #how.is-live .mo-pc__visual.tm-vis { border-radius: 0; aspect-ratio: auto; }
 .tm-scene { --sw: 640px; --sh: 480px; position: absolute; left: 50%; top: 50%; width: var(--sw); height: var(--sh); display: grid; align-content: center; justify-items: stretch;
@@ -381,10 +428,10 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 
 /* ---------------------------------------------------------------- safety: the computer as a boundary only Gmail's line crosses */
 .tm-safety { align-items: stretch; grid-template-rows: minmax(0, 1fr); flex: 1 1 0; min-height: 0; }
-.tm-nots { grid-column: 1 / span 5; display: grid; align-content: start; margin: 0; padding: 0; list-style: none; }
+.tm-nots { grid-column: 1 / span 5; display: grid; align-content: center; margin: 0; padding: 0; list-style: none; }
 .tm-nots li { display: flex; align-items: center; gap: 16px; min-height: 84px; border-bottom: 1px solid var(--line); font: var(--display-weight) var(--t-h3)/1.3 var(--font-display); letter-spacing: -0.02em; }
 .tm-nots li:first-child { border-top: 1px solid var(--line); }
-.tm-nots__icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--tm-sky); color: var(--p-accent); flex: none; }
+.tm-nots__icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(21 35 59 / 8%); color: var(--p-accent); flex: none; }
 .tm-nots__icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .tm-safety > .panel.tm-diagram { grid-column: 6 / -1; position: relative; min-height: 400px; padding: 0; border: 0; border-radius: 24px; --frag: #ffffff; --accent: var(--tm-cobalt); }
 .tm-diagram .dg { position: absolute; inset: 0; }
@@ -412,9 +459,11 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 
 /* ---------------------------------------------------------------- install: the prompt window on the lit panel
    The whole prompt stands in the window in two columns from 640px. A phone folds it after the first steps. */
-.tm-install.frame { display: block; min-height: 0; flex: none; padding: var(--s-5); border: 0; border-radius: 24px; }
+#install .panel.frame.tm-install { display: block; min-height: 0; flex: none; padding: 10px; border: 1px solid rgb(255 255 255 / 16%); border-top-color: rgb(255 255 255 / 30%); border-radius: 28px;
+  background: rgb(255 255 255 / 8%); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: 0 40px 80px -40px rgb(0 0 0 / 50%); }
+html:not([data-tone="dark"]) #install .panel.frame.tm-install { background: var(--tm-sky); border-color: transparent; }
 .tm-install > .tm-code { position: relative; z-index: 1; }
-.tm-code { display: flex; flex-direction: column; border-radius: 18px; background: var(--p-inv-bg); color: var(--p-inv-ink); overflow: hidden; box-shadow: 0 1px 0 rgb(255 255 255 / 8%) inset, 0 24px 48px -24px rgb(21 35 59 / 45%); }
+.tm-code { display: flex; flex-direction: column; border-radius: 18px; background: #0d1a38; --p-inv-bg: #0d1a38; color: var(--p-inv-ink); overflow: hidden; box-shadow: 0 1px 0 rgb(255 255 255 / 8%) inset, 0 24px 48px -24px rgb(21 35 59 / 45%); }
 .tm-code__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-3) var(--s-3) var(--s-2) var(--s-4); flex: none; }
 .tm-code .tab { height: 36px; font-size: 14px; color: rgb(255 255 255 / 72%); border-color: rgb(255 255 255 / 18%); }
 .tm-code .tab[aria-selected="false"]:hover { color: #fff; border-color: rgb(255 255 255 / 40%); }
@@ -436,13 +485,13 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 .tm-note { margin-top: var(--s-5); color: var(--ink); font-size: var(--t-lead); }
 .tm-note .link { margin-left: 4px; }
 @media (min-width: 640px) and (max-width: 1023px) {
-  .tm-install.frame { padding: var(--s-3); }
+  #install .panel.frame.tm-install { padding: 10px; }
   .tm-code__bar { padding-bottom: 0; }
   #panel-prompt pre { font-size: 11px; line-height: 1.55; column-gap: var(--s-5); padding-inline: var(--s-4); }
   .tm-note { margin-top: var(--s-4); font-size: var(--t-body); }
 }
 @media (max-width: 639px) {
-  .tm-install.frame { padding: var(--s-3); border-radius: 20px; }
+  #install .panel.frame.tm-install { padding: 8px; border-radius: 26px; }
   .tm-note .link { display: table; margin: var(--s-2) 0 0; font-size: 15px; }
   .tm-code__bar { flex-wrap: wrap; padding: var(--s-3); }
   .tm-code__copy { width: 100%; }
@@ -462,7 +511,7 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
 .tm-qa__item { display: grid; gap: var(--s-3); padding: var(--s-5) 0 var(--s-6); border-bottom: 1px solid var(--line); }
 .tm-qa__item:first-child { padding-top: 0; }
 .tm-qa__item dt { display: flex; align-items: center; gap: 14px; font: var(--display-weight) var(--t-h3)/1.25 var(--font-display); letter-spacing: -0.02em; color: var(--ink); }
-.tm-qa__icon { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--tm-sky); color: var(--p-accent); }
+.tm-qa__icon { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(21 35 59 / 8%); color: var(--p-accent); }
 .tm-qa__icon svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .tm-qa__icon svg .fill { fill: currentColor; stroke: none; }
 .tm-qa__item dd { margin: 0; max-width: 54ch; font-size: var(--t-lead); line-height: 1.55; color: var(--ink); }
@@ -474,8 +523,10 @@ tr.is-just .tm-pill { animation: tm-pop 360ms cubic-bezier(.22, 1, .36, 1); }
    .wrap. Row 2: the links and "A project by". */
 .closing__cta { min-width: 0; }
 .tm-close__row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-6); }
+/* the row sits a little lower, so the gap down to the name is about 15% shorter */
+.close--word .tm-close__row { margin-top: clamp(24px, 6svh, 64px); }
 .tm-close__line { margin: 0; max-width: 24ch; font: var(--display-weight) clamp(22px, 1.4vw + 16px, 36px)/1.15 var(--font-display); letter-spacing: var(--display-tracking); color: var(--ink); }
-.close--word .close__word { max-width: none; margin: auto 0 0; overflow: visible; color: var(--p-ink); font-size: clamp(64px, 22vw, 318px); line-height: .9; letter-spacing: -0.055em; white-space: nowrap; }
+.close--word .close__word { max-width: none; margin: auto 0 0; overflow: visible; color: var(--ink); font-size: clamp(64px, 22vw, 318px); line-height: .9; letter-spacing: -0.055em; white-space: nowrap; }
 .tm-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-7); padding-top: var(--s-4); border-top: 1px solid var(--line); font-size: var(--t-small); color: var(--muted); }
 .tm-foot .tm-foot__links { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-6); margin: 0 auto 0 0; padding: 0; list-style: none; font-size: 15px; font-weight: 500; }
 .tm-foot__links a { color: var(--ink); display: inline-flex; align-items: center; min-height: 44px; }
@@ -525,3 +576,15 @@ main > #how:not(.is-live) { height: auto; min-height: calc(2 * 100svh); }
   .tm-nots li:nth-child(2) { border-top: 1px solid var(--line); }
   .tm-nots__icon { width: 30px; height: 30px; }
 }
+
+/* ---------------------------------------------------------------- on-scroll: each h2 rises word by word out of a blur as it comes
+   into view, and the blocks under it follow in a short stagger (page.ts marks them; html.tm-reveal only
+   with the script and without reduced motion, so the page never hides words it cannot bring back) */
+html.tm-reveal .tm-split .tm-w {
+  display: inline-block; opacity: 0; transform: translateY(0.5em) rotate(1.5deg); filter: blur(8px); transform-origin: 0 100%;
+  transition: opacity 620ms ease calc(var(--i, 0) * 55ms), transform 980ms cubic-bezier(.22, 1, .36, 1) calc(var(--i, 0) * 55ms), filter 760ms ease calc(var(--i, 0) * 55ms);
+}
+html.tm-reveal .tm-split.is-in .tm-w { opacity: 1; transform: none; filter: none; }
+html.tm-reveal .tm-rise { opacity: 0; transform: translateY(32px);
+  transition: opacity 700ms ease calc(var(--i, 0) * 80ms + 120ms), transform 1000ms cubic-bezier(.22, 1, .36, 1) calc(var(--i, 0) * 80ms + 120ms); }
+html.tm-reveal .tm-rise.is-in { opacity: 1; transform: none; }
