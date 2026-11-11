@@ -26,7 +26,14 @@ export function mountMcp(app: Express, version: string): void {
       handler = createMcpHandler(() => createOutboxServer({ baseUrl, version }));
       handlers.set(port, handler);
     }
-    void serve(handler, request, response).catch(next);
+    void serve(handler, request, response).catch((error: unknown) => {
+      // An agent closing a streamed answer early is normal, and a started response cannot become an error page.
+      if (response.headersSent || response.destroyed) {
+        response.destroy();
+        return;
+      }
+      next(error);
+    });
   });
 }
 

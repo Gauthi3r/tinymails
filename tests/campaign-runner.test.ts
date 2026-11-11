@@ -180,6 +180,43 @@ describe("campaign runner", () => {
     expect(finished).not.toHaveProperty("resumesAt");
   });
 
+  it("keeps one loop per campaign when the resume timer fires between two emails", async () => {
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture({
+        recipients: [
+          { email: "first@example.com", accountId: "account-1", status: "pending" },
+          { email: "second@example.com", accountId: "account-1", status: "pending" },
+        ],
+      }),
+    ]);
+    let releaseDelay!: () => void;
+    const firstDelay = new Promise<void>((resolve) => {
+      releaseDelay = resolve;
+    });
+    let delays = 0;
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: () => {
+        delays += 1;
+        return delays === 1 ? firstDelay : Promise.resolve();
+      },
+    });
+
+    const running = runner.run("campaign-1");
+    await expect.poll(() => delays).toBe(1);
+    await runner.resumeWaiting();
+    expect(gmail.sent).toHaveLength(1);
+
+    releaseDelay();
+    await running;
+
+    expect(gmail.sent.map((sent) => sent.message.to)).toEqual(["first@example.com", "second@example.com"]);
+  });
+
   it("stores an unchanged wait only once", async () => {
     accounts = new MemoryAccountRepository([
       accountFixture({ sendingWindow: { days: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" } }),

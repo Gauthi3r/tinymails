@@ -547,7 +547,11 @@ export function createApp(dependencies: AppDependencies) {
       });
   }));
 
-  app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+  app.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
+    if (response.headersSent) {
+      next(error);
+      return;
+    }
     if (isPayloadTooLarge(error)) {
       response.status(413).json({ error: "That request is larger than TinyMails' 12 MB local limit." });
       return;

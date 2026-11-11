@@ -49,6 +49,8 @@ npm start
 
 A campaign you started keeps going for as long as TinyMails is running: at the daily cap or outside the sending window it shows **Waiting** and continues by itself at the next allowed time. If TinyMails is stopped and started again, a campaign that was running comes back paused and tells you so. Press **Start** to continue.
 
+The daily cap counts per calendar day in the account's time zone. If your sending hours cross midnight, a waiting campaign continues at midnight, so keep the cap well below Gmail's own rolling 24-hour limit.
+
 Only one TinyMails process may use a data directory, even when processes use different ports. A second process exits before campaign recovery or sending begins. Normal shutdown removes `instance.lock`. If TinyMails reports a stale lock after a crash or power loss, first confirm that no TinyMails process is running, then remove `instance.lock` from the data directory shown in the error.
 
 ## Connect Gmail

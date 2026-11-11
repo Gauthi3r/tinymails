@@ -33,6 +33,8 @@ This is a rule of the MCP connection, not a wall around the computer. The local 
 
 Reaching the daily cap or the end of the sending window is not a problem to fix, so the campaign stays running. It records `waitingReason` and `resumesAt`, the runner returns, and a one-minute timer in the server calls `resumeWaiting()`, which picks the campaign up once the account may send again. A timer was chosen over one long sleep because it survives the computer sleeping and picks up changed account settings.
 
+The cap counts per calendar day in the account's time zone, as it did in v0.1. With sending hours that cross midnight, a waiting campaign therefore continues at midnight: one day's cap can go out before it and the next day's after it. Gmail measures its own limits over a rolling 24 hours, so an account with all-day sending hours should keep a cap well under half of Gmail's limit. The default hours, Monday to Friday 09:00 to 17:00, are not affected.
+
 `resumesAt` is found by walking forward a minute at a time in the account's time zone (`src/domain/schedule.ts`). That is slower than arithmetic and immune to daylight-saving and overnight-window mistakes.
 
 ## Restart still pauses

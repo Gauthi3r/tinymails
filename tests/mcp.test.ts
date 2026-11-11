@@ -11,6 +11,7 @@ import type { Account } from "../src/domain/types";
 import { FakeGmailAccountAdapter } from "../src/gmail/fake-adapter";
 import { createOutboxServer } from "../src/mcp/server";
 import { createApp } from "../src/server/app";
+import { CampaignRunner } from "../src/server/campaign-runner";
 import { createRepositories, type Repositories } from "../src/server/repositories";
 
 // A weekday inside the default sending window.
@@ -28,7 +29,16 @@ describe("MCP connection", () => {
     repositories = createRepositories(dataDir);
     await repositories.accounts.save(accountFixture());
     gmail = new FakeGmailAccountAdapter();
-    const app = createApp({ repositories, gmail, dataDir, clock: () => now });
+    // No real waiting between emails, so a started campaign finishes inside the test.
+    const runner = new CampaignRunner({
+      campaigns: repositories.campaigns,
+      accounts: repositories.accounts,
+      suppression: repositories.suppression,
+      gmail,
+      clock: () => now,
+      delay: async () => undefined,
+    });
+    const app = createApp({ repositories, gmail, dataDir, runner, clock: () => now });
     server = await new Promise<Server>((resolve) => {
       const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
     });
@@ -169,6 +179,10 @@ describe("MCP connection", () => {
     const started = await call(client, "start_campaign", { campaignId });
 
     expect(started.data.campaign.status).toBe("running");
+    await expect.poll(async () => (await repositories.campaigns.get(campaignId))?.status).toBe("done");
+    expect(gmail.sent.map((sent) => sent.message.to)).toEqual(["sender@example.com", "ada@example.com"]);
+    const pause = (await client.listTools()).tools.find((tool) => tool.name === "pause_campaign");
+    expect(pause?.description).toBe("Pause a running campaign. It stays paused until it is started again.");
   });
 
   it("reports progress, and one campaign's recipients on request", async () => {

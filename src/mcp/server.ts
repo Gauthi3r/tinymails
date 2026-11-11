@@ -159,7 +159,9 @@ export async function createOutboxServer(options: OutboxServerOptions): Promise<
     "pause_campaign",
     {
       title: "Pause a campaign",
-      description: "Pause a running campaign. It stays paused until the user presses Start again.",
+      description: agentsCanStart
+        ? "Pause a running campaign. It stays paused until it is started again."
+        : "Pause a running campaign. It stays paused until the user presses Start again.",
       inputSchema: z.object({ campaignId: z.string() }),
     },
     ({ campaignId }) => answer(async () => ({ campaign: summary(await api.pause(campaignId)) })),
