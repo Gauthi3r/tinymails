@@ -1,9 +1,11 @@
 // The page's own behaviour, beside the taste-skill kit (system.js, motion.js, the moments):
-// the copy button, the morphing nav, the hero's live stage and the four chapter pictures.
+// the sky, the copy button, the condensing nav, the reveals, the hero's live stage and the four
+// chapter pictures.
 // The hero and the pace chapter run TinyMails' own queue code (src/sim), so the counts, the
 // times and the pause reason on screen are the product's.
 import { DemoSession, type SessionState } from "../sim/session";
 import { clockTime } from "../sim/time";
+import { setupSky } from "./sky";
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document) => root.querySelector<T>(s);
 const $$ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document) => [...root.querySelectorAll<T>(s)];
@@ -85,61 +87,126 @@ function setupCopy(): void {
   }
 }
 
-// ---------------------------------------------------------------- the nav: a top bar that morphs into a floating pill
-// The pill shows once the hero's buttons have gone and docks away while the close is on screen, where
-// the footer has its own button and links. Only classes change: the CSS moves both parts by transform
-// and opacity, and a view transition morphs the bar into the pill and back.
+// ---------------------------------------------------------------- the nav: a clear bar that condenses into a pill
+// One header, one morph tied to the scroll. layout() measures every part where it sits in the open
+// bar and works out its seat in the pill (the mark at the pill's left, the rest packed at its right),
+// then the CSS moves each part by --np times its offset while the white shape closes in round them.
+// Nothing here changes layout on scroll: one custom property and two classes.
+const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 function setupNav(): void {
   const nav = $<HTMLElement>("[data-nav]");
   const hero = $<HTMLElement>(".hero");
-  const close = $<HTMLElement>("footer.closing");
   if (!nav || !hero) return;
-  const label = $<HTMLElement>("[data-now-label]", nav);
-  const fill = $<HTMLElement>("[data-now-fill]", nav);
-  const links = $$<HTMLAnchorElement>("[data-sec]", nav);
-  const ids = [...new Set(links.map((a) => a.dataset.sec ?? ""))];
-  const sections = ids.map((id) => ({ id, el: document.getElementById(id)!, label: links.find((a) => a.dataset.sec === id)!.textContent ?? "" })).filter((x) => x.el);
-  // the pill's menu button opens the kit's menu sheet on the header
-  $<HTMLButtonElement>("[data-pill-menu]", nav)?.addEventListener("click", () => $<HTMLButtonElement>(".nav__toggle", nav)?.click());
-  let floating = false;
-  let current = "";
-  const vt = (document as Document & { startViewTransition?: (cb: () => void) => unknown }).startViewTransition;
+  const part = (name: string) => $<HTMLElement>(`[data-part="${name}"]`, nav);
+  const logo = part("logo"), links = part("links"), gh = part("gh"), cta = part("cta"), toggle = part("toggle");
+  if (!logo) return;
+  const here = $<HTMLElement>("[data-here]", nav);
+  const sections = $$<HTMLAnchorElement>(".nav__links [data-sec]", nav)
+    .map((a) => ({ a, el: document.getElementById(a.dataset.sec ?? "") }))
+    .filter((x): x is { a: HTMLAnchorElement; el: HTMLElement } => !!x.el);
+  const RANGE = 140;   // px of scroll from the open bar to the pill
+  nav.classList.add("is-live");
+  const shown = (el: HTMLElement | null): el is HTMLElement => !!el && el.getClientRects().length > 0;
+  let pill = false;
+  let current: HTMLAnchorElement | null = null;
 
-  const morph = (on: boolean) => {
-    if (on === floating) return;
-    floating = on;
-    if (!on && nav.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    const apply = () => nav.classList.toggle("is-float", on);
-    if (!reduced() && vt && !nav.classList.contains("is-open")) vt.call(document, apply);
-    else apply();
+  const layout = () => {
+    const was = nav.style.getPropertyValue("--np");
+    nav.style.setProperty("--np", "0");
+    const vw = document.documentElement.clientWidth;
+    const small = vw < 640;
+    const H = small ? 52 : 56, top = small ? 8 : 12, padL = small ? 16 : 20, padR = 6, gap = small ? 8 : 14;
+    const seq = [logo, links, cta, toggle].filter(shown);
+    const rects = new Map(seq.map((el) => [el, el.getBoundingClientRect()] as const));
+    const packed = padL + padR + seq.reduce((n, el) => n + rects.get(el)!.width, 0) + gap * (seq.length - 1);
+    // a phone's pill runs nearly edge to edge, so the mark and the menu sit where a thumb expects them
+    const w = small ? vw - 24 : Math.min(vw - 24, packed);
+    const x0 = (vw - w) / 2;
+    const seats = new Map<HTMLElement, number>([[seq[0], x0 + padL]]);
+    let x = x0 + w - padR;
+    for (const el of seq.slice(1).reverse()) { x -= rects.get(el)!.width; seats.set(el, x); x -= gap; }
+    for (const el of seq) {
+      const r = rects.get(el)!;
+      el.style.setProperty("--dx", (seats.get(el)! - r.left).toFixed(1));
+      el.style.setProperty("--dy", (top + H / 2 - (r.top + r.height / 2)).toFixed(1));
+    }
+    // GitHub rides along with the main button as it fades
+    if (gh && cta) for (const k of ["--dx", "--dy"]) gh.style.setProperty(k, cta.style.getPropertyValue(k));
+    nav.style.setProperty("--sx", x0.toFixed(1));
+    nav.style.setProperty("--sw", w.toFixed(1));
+    nav.style.setProperty("--sh", String(H));
+    nav.style.setProperty("--st", String(top));
+    nav.style.setProperty("--np", was || "0");
+    current = null;
+  };
+
+  const markHere = (a: HTMLAnchorElement | null) => {
+    if (a === current) return;
+    const first = !current;
+    current = a;
+    sections.forEach((s) => s.a.classList.toggle("is-here", s.a === a));
+    if (!here) return;
+    here.classList.toggle("is-on", !!a);
+    if (!a) return;
+    // the first time it lands where it is; after that it slides from word to word
+    here.classList.toggle("is-jump", first);
+    here.style.setProperty("--hx", String(a.offsetLeft));
+    here.style.setProperty("--hw", String(a.offsetWidth));
+    if (first) requestAnimationFrame(() => requestAnimationFrame(() => here.classList.remove("is-jump")));
   };
 
   let ticking = false;
   const update = () => {
     ticking = false;
-    const h = hero.offsetHeight;
-    const y = scrollY;
-    if (!floating && y > h * 0.55) morph(true);
-    else if (floating && y < h * 0.35) morph(false);
-    const docked = !!close && close.getBoundingClientRect().top < innerHeight * 0.7;
-    if (docked !== nav.classList.contains("is-docked")) {
-      if (docked && $(".tm-float", nav)?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-      nav.classList.toggle("is-docked", docked);
+    const t = clamp01(scrollY / RANGE);
+    const np = t * t * (3 - 2 * t);
+    nav.style.setProperty("--np", np.toFixed(4));
+    nav.style.setProperty("--nb", clamp01(np * 2).toFixed(4));
+    const c = clamp01((np - 0.18) / 0.2);
+    nav.style.setProperty("--nc", (c * c * (3 - 2 * c)).toFixed(4));
+    nav.classList.toggle("is-glass", np > 0.02);
+    if (np > 0.6 !== pill) {
+      pill = !pill;
+      if (!pill && gh?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+      nav.classList.toggle("is-pill", pill);
     }
-    const mid = y + innerHeight * 0.45;
-    let here = sections[0];
-    for (const x of sections) if (x.el.offsetTop <= mid) here = x;
-    const p = Math.min(1, Math.max(0, (mid - here.el.offsetTop) / here.el.offsetHeight));
-    if (here.id !== current) {
-      current = here.id;
-      links.forEach((a) => a.classList.toggle("is-here", a.dataset.sec === here.id));
-      if (label) label.textContent = here.label;
-    }
-    fill?.style.setProperty("--p", p.toFixed(3));
+    if (!reduced()) hero.style.setProperty("--hp", clamp01(scrollY / (hero.offsetHeight * 0.85)).toFixed(4));
+    const mid = innerHeight * 0.45;
+    const inView = sections.find((s) => { const r = s.el.getBoundingClientRect(); return r.top <= mid && r.bottom > mid; });
+    markHere(pill && inView ? inView.a : null);
   };
-  addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
-  addEventListener("resize", update, { passive: true });
+  const kick = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+  addEventListener("scroll", kick, { passive: true });
+  addEventListener("resize", () => { layout(); update(); }, { passive: true });
+  layout();
   update();
+  void document.fonts?.ready.then(() => { layout(); update(); });
+}
+
+// ---------------------------------------------------------------- on-scroll reveals
+// Each h2 (and the close's name, letter by letter) rises out of a blur word by word as it comes into
+// view; the blocks under it follow in a short stagger. Only with motion allowed: html.tm-reveal is what
+// hides them, so without it everything simply stands.
+function setupReveals(): void {
+  if (reduced() || !("IntersectionObserver" in window)) return;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); }
+  }, { rootMargin: "0px 0px -10% 0px", threshold: 0.12 });
+  const split = (el: HTMLElement, by: "word" | "letter") => {
+    if (el.children.length) return;
+    const text = el.textContent ?? "";
+    el.setAttribute("aria-label", text);
+    const bits = by === "word" ? text.split(/(\s+)/) : [...text];
+    let i = 0;
+    el.innerHTML = bits.map((b) => (/^\s+$/.test(b) ? b : `<span class="tm-w" aria-hidden="true" style="--i:${i++}">${b}</span>`)).join("");
+    el.classList.add("tm-split");
+    io.observe(el);
+  };
+  $$("main > section:not(.hero) h2").forEach((h) => split(h, "word"));
+  $$(".close__word").forEach((h) => split(h, "letter"));
+  const RISE = [".section-head > p", ".tm-nots li", ".tm-diagram", ".tm-install", ".tm-note", ".tm-qa__item", ".tm-close__row", ".tm-foot"];
+  for (const sel of RISE) $$(sel).forEach((el, i) => { el.classList.add("tm-rise"); el.style.setProperty("--i", String(i)); io.observe(el); });
+  html.classList.add("tm-reveal");
 }
 
 // ---------------------------------------------------------------- the recipient table and the row's button, as the app draws them
@@ -229,7 +296,7 @@ async function setupHero(): Promise<void> {
       x0 = (pill ? pill.left + pill.width / 2 : w.right - 120) - f.left;
       y0 = (pill ? pill.top + pill.height / 2 : w.top + w.height / 2) - f.top;
       x1 = g.left + 32 - f.left; y1 = g.top + g.height / 2 - f.top;
-      cx = (x0 + x1) / 2 + 30; cy = Math.min(y0, y1) - 70;
+      cx = (x0 + x1) / 2 + 30; cy = Math.min(y0, y1) - 36;   // a low arc: the stage has no frame now, so the envelope stays clear of the words above
     }
     const tmp = document.createElement("span");
     tmp.innerHTML = ENVELOPE;
@@ -500,8 +567,10 @@ function setupChapters(): void {
   // finished still, as the kit's moment does there (moments.md, pinned-chapters)
 }
 
+setupSky();
 setupCopy();
 setupNav();
+setupReveals();
 setupChapters();
 void setupHero();
 html.dataset.page = "ready";
