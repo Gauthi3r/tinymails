@@ -13,4 +13,3 @@ credentials.json
 credentials.enc
 .encryption_key
 /*.csv
-!examples/*.csv

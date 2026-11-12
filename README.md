@@ -149,6 +149,17 @@ npm run dev
 
 Vite runs at `http://127.0.0.1:5173` and proxies `/api` requests to the local service.
 
+Where things are:
+
+| Folder | What is in it |
+| --- | --- |
+| `src/` | The app: `app` (the window), `server` (the local service and the queue), `mcp` (the agent tools), `gmail`, `domain` |
+| `tests/` | The test suite. Gmail is always a fake adapter |
+| `scripts/` | The launcher, the MCP stdio bridge, and the public-tree scanner |
+| `site/` | The website at tinymails.com |
+| `docs/` | Design records, the notices, and an example contacts file |
+| `.github/` | Contributing guide, security policy, code of conduct, and CI |
+
 ## Distribution
 
 TinyMails is source-first: clone → `npm install` → `npm start`. This keeps the local data model, operating-system credential vault, loopback OAuth callback, and background campaign runner intact without installer signing or a hosted control plane.
@@ -192,6 +203,6 @@ TinyMails is meant to stay small and easy to fork for your own needs. Likely nex
 
 ## License
 
-The source code is licensed under [GNU AGPL-3.0-only](LICENSE). The license does not grant rights to use the TinyMails name or marks for a modified or hosted product. See [TRADEMARKS.md](TRADEMARKS.md).
+The source code is licensed under [GNU AGPL-3.0-only](LICENSE). The license does not grant rights to use the TinyMails name or marks for a modified or hosted product. See [TRADEMARKS.md](docs/TRADEMARKS.md).
 
-The OA design recipes used in the interface retain their MIT notice in [NOTICE.md](NOTICE.md).
+The OA design recipes used in the interface retain their MIT notice in [NOTICE.md](docs/NOTICE.md).
