@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { normalizeEmail } from "../domain/email";
-import type { Account, Campaign, ContactList, Lead, Template } from "../domain/types";
-import { JsonStore } from "./json-store";
+import type { Account, AppSettings, Campaign, ContactList, Lead, Template } from "../domain/types";
+import { JsonStore, replaceFile } from "./json-store";
 
 interface Identified {
   id: string;
@@ -208,7 +208,28 @@ export class SuppressionListRepository {
       encoding: "utf8",
       mode: 0o600,
     });
-    await rename(temporaryPath, this.path);
+    await replaceFile(temporaryPath, this.path);
+  }
+}
+
+const DEFAULT_SETTINGS: AppSettings = { agentsCanStart: false };
+
+export class SettingsRepository {
+  private readonly queue = new SerialQueue();
+
+  constructor(private readonly store: JsonStore<Partial<AppSettings>>) {}
+
+  async read(): Promise<AppSettings> {
+    const stored = await this.store.read();
+    return { agentsCanStart: stored.agentsCanStart === true };
+  }
+
+  update(changes: Partial<AppSettings>): Promise<AppSettings> {
+    return this.queue.run(async () => {
+      const settings = { ...(await this.read()), ...changes };
+      await this.store.write(settings);
+      return settings;
+    });
   }
 }
 
@@ -232,6 +253,7 @@ export interface Repositories {
   lists: CollectionRepository<ContactList>;
   templates: CollectionRepository<Template>;
   suppression: SuppressionListRepository;
+  settings: SettingsRepository;
 }
 
 export function createRepositories(
@@ -248,5 +270,6 @@ export function createRepositories(
     lists,
     templates: new CollectionRepository(new JsonStore(join(dataDir, "templates.json"), [])),
     suppression: new SuppressionListRepository(join(dataDir, "suppression.txt")),
+    settings: new SettingsRepository(new JsonStore(join(dataDir, "settings.json"), DEFAULT_SETTINGS)),
   };
 }

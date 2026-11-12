@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { normalizeEmail } from "./email";
+import { localDay } from "./schedule";
 export { renderMessage } from "./personalization";
+export { localDay } from "./schedule";
 import type { Campaign, ContactInput } from "./types";
 
 export interface CreateCampaignInput {
@@ -114,31 +116,34 @@ export function sentToday(
   );
 }
 
+export const RESTART_PAUSE_REASON = "TinyMails was restarted. Press Start to continue.";
+export const UNKNOWN_DELIVERY_REASON = "Delivery result is unknown. Check Gmail Sent before retrying.";
+
+/**
+ * Applied once at startup. A campaign that was running comes back paused, so
+ * opening TinyMails never sends by surprise, and a delivery that was in flight
+ * is marked failed so it cannot go out twice.
+ */
 export function recoverInterruptedCampaigns(campaigns: Campaign[]): Campaign[] {
   return campaigns.map((campaign) => {
+    const interrupted = campaign.recipients.some((recipient) => recipient.status === "sending");
+    const recipients = campaign.recipients.map((recipient): Campaign["recipients"][number] =>
+      recipient.status === "sending"
+        ? { ...recipient, status: "failed", error: UNKNOWN_DELIVERY_REASON }
+        : { ...recipient },
+    );
+    if (campaign.status !== "running") return { ...campaign, recipients };
     return {
-      ...campaign,
-      status: campaign.status === "running" ? "paused" : campaign.status,
-      recipients: campaign.recipients.map((recipient) =>
-        recipient.status === "sending"
-          ? {
-              ...recipient,
-              status: "failed",
-              error: "Delivery result is unknown. Check Gmail Sent before retrying.",
-            }
-          : { ...recipient },
-      ),
+      ...withoutWait(campaign),
+      status: "paused",
+      pauseReason: interrupted ? UNKNOWN_DELIVERY_REASON : RESTART_PAUSE_REASON,
+      recipients,
     };
   });
 }
 
-export function localDay(date: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
+/** A copy of the campaign with its waiting note removed: it is sending again, or no longer running. */
+export function withoutWait(campaign: Campaign): Campaign {
+  const { waitingReason: _waitingReason, resumesAt: _resumesAt, ...rest } = campaign;
+  return rest;
 }

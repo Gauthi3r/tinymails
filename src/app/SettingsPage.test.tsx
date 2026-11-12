@@ -140,6 +140,37 @@ describe("Gmail setup", () => {
   });
 });
 
+describe("Agents", () => {
+  it("shows the MCP address and command, with starting switched off", () => {
+    render(
+      <SettingsPage
+        api={connectionApi(accountFixture())}
+        settings={{ ...settingsFixture([]), mcpBridgePath: "/opt/tinymails/scripts/mcp.mjs" }}
+        error={false}
+        onSettingsChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(`${window.location.origin}/mcp`)).toBeVisible();
+    expect(screen.getByText('node "/opt/tinymails/scripts/mcp.mjs"')).toBeVisible();
+    expect(screen.getByRole("switch", { name: "Let agents start campaigns" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Off. Agents queue and test. You press Start.")).toBeVisible();
+  });
+
+  it("saves the choice to let agents start campaigns", async () => {
+    const api = connectionApi(accountFixture());
+    const onSettingsChange = vi.fn();
+    render(
+      <SettingsPage api={api} settings={settingsFixture([])} error={false} onSettingsChange={onSettingsChange} />,
+    );
+
+    await userEvent.click(screen.getByRole("switch", { name: "Let agents start campaigns" }));
+
+    expect(api.setAgentsCanStart).toHaveBeenCalledWith(true);
+    expect(onSettingsChange).toHaveBeenCalledWith(expect.objectContaining({ agentsCanStart: true }));
+  });
+});
+
 function connectionApi(account: PublicAccount) {
   return {
     getCampaigns: vi.fn(async () => []),
@@ -150,6 +181,7 @@ function connectionApi(account: PublicAccount) {
       pagination: { page: 1, pageSize: 50, total: 0, pages: 1 },
     })),
     getSettings: vi.fn(async () => settingsFixture([account])),
+    setAgentsCanStart: vi.fn(async (allowed: boolean) => allowed),
     startGoogleOAuth: vi.fn(async () => ({
       sessionId: "session-1",
       authorizationUrl: "https://accounts.google.test/authorize",
@@ -172,7 +204,7 @@ function connectionApi(account: PublicAccount) {
 }
 
 function settingsFixture(accounts: PublicAccount[]): SettingsResponse {
-  return { accounts, dataDir: "/tmp/tinymails-test", version: "0.1.0", suppressionCount: 0 };
+  return { accounts, dataDir: "/tmp/tinymails-test", version: "0.1.0", suppressionCount: 0, agentsCanStart: false };
 }
 
 function accountFixture(): PublicAccount {

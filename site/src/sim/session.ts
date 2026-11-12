@@ -1,10 +1,10 @@
 import { DemoController } from "./controller";
-import type { Campaign } from "./product";
-import { dayAndTime, nextOpening } from "./time";
+import { CAP_WAIT_REASON, WINDOW_WAIT_REASON, type Campaign } from "./product";
+import { shortDayAndTime } from "./time";
 import { DemoWorld, type WorldOptions } from "./world";
 
-export const CAP_REASON = "The Gmail account's daily cap has been reached.";
-export const WINDOW_REASON = "Outside the Gmail account's sending window.";
+export const CAP_REASON = CAP_WAIT_REASON;
+export const WINDOW_REASON = WINDOW_WAIT_REASON;
 export const MANUAL_REASON = "Paused manually.";
 
 export type Phase = "untested" | "ready" | "running" | "paused" | "waiting" | "done";
@@ -15,23 +15,22 @@ export interface SessionState {
   sent: number;
   queued: number;
   now: number;
-  /** Set once, when the clock has rolled to the next window opening. */
-  rolled?: { from: number; to: number };
   campaign: Campaign;
 }
 
 /**
  * The hero's demo: one world, the visitor's three buttons, and the honest
- * status line. After the runner pauses at the cap or the window, the demo
- * clock moves to the next window opening and waits for the human. It never
- * presses Start by itself, because TinyMails does not.
+ * status line. At the cap or outside the window the product's runner leaves
+ * the campaign running and waiting, with the time it may send again.
+ * `continueWaiting` does what the app's once-a-minute timer does once that
+ * time comes: the clock moves there and the runner carries on, with no
+ * second press of Start.
  */
 export class DemoSession {
   readonly world: DemoWorld;
   readonly controller: DemoController;
   private tested = false;
   private everStarted = false;
-  private rolled?: { from: number; to: number };
   private readonly listeners = new Set<(state: SessionState) => void>();
   private disposed = false;
 
@@ -51,7 +50,6 @@ export class DemoSession {
       sent,
       queued: campaign.recipients.length,
       now: this.world.now,
-      rolled: this.rolled,
       campaign,
     };
   }
@@ -68,16 +66,31 @@ export class DemoSession {
     return result;
   }
 
-  /** Resolves when this press of Start has settled: paused, done, or handed over. */
+  /** Resolves when the runner returns: waiting at a limit, paused, or done. */
   async start() {
     const result = await this.controller.start();
     if (!result.ok) return result;
     this.everStarted = true;
-    this.rolled = undefined;
     this.emit();
     await result.run;
-    this.settle();
+    this.emit();
     return result;
+  }
+
+  /**
+   * While the campaign waits, move the clock to its own `resumesAt` and call
+   * the runner's `resumeWaiting`, as the app's timer does, until it is no
+   * longer waiting. Does nothing for a paused or finished campaign.
+   */
+  async continueWaiting(): Promise<void> {
+    for (let round = 0; round < 30 && !this.disposed; round += 1) {
+      const campaign = this.world.campaign();
+      if (campaign.status !== "running" || !campaign.waitingReason || !campaign.resumesAt) break;
+      this.world.now = Math.max(this.world.now, Date.parse(campaign.resumesAt));
+      this.emit();
+      await this.world.runner.resumeWaiting();
+    }
+    this.emit();
   }
 
   async pause() {
@@ -91,25 +104,12 @@ export class DemoSession {
     this.listeners.clear();
   }
 
-  private settle(): void {
-    if (this.disposed) return;
-    const campaign = this.world.campaign();
-    const reason = campaign.pauseReason;
-    if (campaign.status === "paused" && (reason === CAP_REASON || reason === WINDOW_REASON) && !this.rolled) {
-      const from = this.world.now;
-      const to = nextOpening(this.world.rules, from, false);
-      this.world.now = to;
-      this.rolled = { from, to };
-    }
-    this.emit();
-  }
-
   private phase(campaign: Campaign): Phase {
     if (campaign.status === "done") return "done";
-    if (campaign.status === "running") return "running";
+    if (campaign.status === "running") return campaign.waitingReason ? "waiting" : "running";
     if (!this.tested) return "untested";
     if (!this.everStarted) return "ready";
-    return this.rolled ? "waiting" : "paused";
+    return "paused";
   }
 
   private statusLine(phase: Phase, campaign: Campaign, sent: number): string {
@@ -123,7 +123,7 @@ export class DemoSession {
       case "done":
         return `Done. ${sent} sent.`;
       case "waiting":
-        return `${campaign.pauseReason} It is now ${dayAndTime(this.world.now)}. Press Start to continue.`;
+        return waitingLine(campaign);
       case "paused":
         return campaign.pauseReason ?? MANUAL_REASON;
     }
@@ -134,4 +134,10 @@ export class DemoSession {
     const state = this.state();
     for (const listener of this.listeners) listener(state);
   }
+}
+
+/** The app's waiting line (src/app/CampaignsPage.tsx), in the demo's UTC clock. */
+export function waitingLine(campaign: Campaign): string {
+  if (!campaign.resumesAt) return campaign.waitingReason ?? "";
+  return `${campaign.waitingReason} It continues on its own, ${shortDayAndTime(Date.parse(campaign.resumesAt))}.`;
 }

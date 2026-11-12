@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "../components/button";
 import { NoticeStrip } from "../components/notice-strip";
 import { SquircleCard, SquircleCardRow } from "../components/squircle-card";
+import { AgentsCard } from "./AgentsCard";
 import type { AppApi, PublicAccount, SettingsResponse } from "./api";
 import { PageFrame } from "./CampaignsPage";
 
@@ -303,6 +304,7 @@ export function SettingsPage({
           <SquircleCardRow label="Hosted data" value="None" />
         </SquircleCard>
       </div>
+      <AgentsCard api={api} settings={settings} onSettingsChange={onSettingsChange} />
       <SquircleCard title="Local data" icon={<Database />} contentClassName="py-2">
         <SquircleCardRow
           label="Data directory"

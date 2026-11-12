@@ -106,7 +106,7 @@ describe("campaign runner", () => {
     expect((await campaigns.get("campaign-1"))?.status).toBe("done");
   });
 
-  it("pauses before sending when the account daily cap is exhausted", async () => {
+  it("waits, still running, when the account daily cap is exhausted", async () => {
     const prior = campaignFixture({
       id: "prior",
       status: "done",
@@ -134,12 +134,114 @@ describe("campaign runner", () => {
 
     expect(gmail.sent).toEqual([]);
     expect(await campaigns.get("campaign-1")).toMatchObject({
-      status: "paused",
-      pauseReason: "The Gmail account's daily cap has been reached.",
+      status: "running",
+      waitingReason: "The Gmail account's daily cap has been reached.",
+      resumesAt: "2026-08-30T00:00:00.000Z",
     });
   });
 
-  it("records why delivery is paused outside the account sending window", async () => {
+  it("continues by itself once the daily cap resets", async () => {
+    let time = now;
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture({
+        recipients: [
+          { email: "first@example.com", accountId: "account-1", status: "pending" },
+          { email: "second@example.com", accountId: "account-1", status: "pending" },
+        ],
+      }),
+    ]);
+    accounts = new MemoryAccountRepository([accountFixture({ dailyCap: 1 })]);
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => time,
+      delay: async () => undefined,
+    });
+
+    await runner.run("campaign-1");
+    expect(gmail.sent).toHaveLength(1);
+    expect(await campaigns.get("campaign-1")).toMatchObject({
+      status: "running",
+      waitingReason: "The Gmail account's daily cap has been reached.",
+    });
+
+    await runner.resumeWaiting();
+    expect(gmail.sent).toHaveLength(1);
+
+    time = new Date("2026-08-30T00:00:00.000Z");
+    await runner.resumeWaiting();
+
+    expect(gmail.sent).toHaveLength(2);
+    const finished = await campaigns.get("campaign-1");
+    expect(finished?.status).toBe("done");
+    expect(finished).not.toHaveProperty("waitingReason");
+    expect(finished).not.toHaveProperty("resumesAt");
+  });
+
+  it("keeps one loop per campaign when the resume timer fires between two emails", async () => {
+    campaigns = new MemoryCampaignRepository([
+      campaignFixture({
+        recipients: [
+          { email: "first@example.com", accountId: "account-1", status: "pending" },
+          { email: "second@example.com", accountId: "account-1", status: "pending" },
+        ],
+      }),
+    ]);
+    let releaseDelay!: () => void;
+    const firstDelay = new Promise<void>((resolve) => {
+      releaseDelay = resolve;
+    });
+    let delays = 0;
+    runner = new CampaignRunner({
+      campaigns,
+      accounts,
+      suppression,
+      gmail,
+      clock: () => now,
+      delay: () => {
+        delays += 1;
+        return delays === 1 ? firstDelay : Promise.resolve();
+      },
+    });
+
+    const running = runner.run("campaign-1");
+    await expect.poll(() => delays).toBe(1);
+    await runner.resumeWaiting();
+    expect(gmail.sent).toHaveLength(1);
+
+    releaseDelay();
+    await running;
+
+    expect(gmail.sent.map((sent) => sent.message.to)).toEqual(["first@example.com", "second@example.com"]);
+  });
+
+  it("stores an unchanged wait only once", async () => {
+    accounts = new MemoryAccountRepository([
+      accountFixture({ sendingWindow: { days: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" } }),
+    ]);
+    runner = new CampaignRunner({ campaigns, accounts, suppression, gmail, clock: () => now, delay: async () => undefined });
+
+    await runner.resumeWaiting();
+    const writes = campaigns.writes;
+    await runner.resumeWaiting();
+
+    expect(writes).toBe(1);
+    expect(campaigns.writes).toBe(writes);
+  });
+
+  it("leaves a paused campaign alone when resuming waiting ones", async () => {
+    campaigns = new MemoryCampaignRepository([campaignFixture({ status: "paused", pauseReason: "Paused manually." })]);
+    runner = new CampaignRunner({ campaigns, accounts, suppression, gmail, clock: () => now, delay: async () => undefined });
+
+    await runner.resumeWaiting();
+
+    expect(gmail.sent).toEqual([]);
+    expect((await campaigns.get("campaign-1"))?.status).toBe("paused");
+  });
+
+  it("waits for the next opening outside the account sending window", async () => {
     accounts = new MemoryAccountRepository([
       accountFixture({ sendingWindow: { days: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" } }),
     ]);
@@ -156,8 +258,9 @@ describe("campaign runner", () => {
 
     expect(gmail.sent).toEqual([]);
     expect(await campaigns.get("campaign-1")).toMatchObject({
-      status: "paused",
-      pauseReason: "Outside the Gmail account's sending window.",
+      status: "running",
+      waitingReason: "Outside the Gmail account's sending window.",
+      resumesAt: "2026-08-31T09:00:00.000Z",
     });
   });
 
@@ -213,7 +316,12 @@ describe("campaign runner", () => {
 
     expect(gmail.sent).toHaveLength(1);
     expect([await campaigns.get("campaign-1"), await campaigns.get("campaign-2")])
-      .toEqual(expect.arrayContaining([expect.objectContaining({ status: "paused" })]));
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          status: "running",
+          waitingReason: "The Gmail account's daily cap has been reached.",
+        }),
+      ]));
   });
 
   it("gives an overlapping queued recipient to the earliest active campaign", async () => {
@@ -356,6 +464,7 @@ describe("campaign runner", () => {
 
 class MemoryCampaignRepository implements CampaignRepository {
   private readonly records = new Map<string, Campaign>();
+  writes = 0;
 
   constructor(campaigns: Campaign[]) {
     for (const campaign of campaigns) this.records.set(campaign.id, structuredClone(campaign));
@@ -379,6 +488,7 @@ class MemoryCampaignRepository implements CampaignRepository {
     if (!campaign) return null;
     const updated = update(structuredClone(campaign));
     this.records.set(id, structuredClone(updated));
+    this.writes += 1;
     return structuredClone(updated);
   }
 }

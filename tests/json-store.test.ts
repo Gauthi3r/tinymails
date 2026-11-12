@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Campaign } from "../src/domain/types";
 import { resolveDataDir } from "../src/server/data-dir";
-import { JsonStore } from "../src/server/json-store";
+import { JsonStore, replaceFile } from "../src/server/json-store";
 import { honorsPosixModes } from "./platform";
 
 describe("local data storage", () => {
@@ -23,6 +23,41 @@ describe("local data storage", () => {
 
     expect(await store.read()).toEqual(stored);
     expect((await readdir(dir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("retries a write the system refuses while the file is being read", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tinymails-store-"));
+    const temporary = join(dir, "campaigns.json.tmp");
+    const target = join(dir, "campaigns.json");
+    await writeFile(target, "old");
+    await writeFile(temporary, "new");
+    let refusals = 2;
+
+    await replaceFile(temporary, target, async (from, to) => {
+      if (refusals > 0) {
+        refusals -= 1;
+        throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+      }
+      await rename(from, to);
+    });
+
+    expect(await readFile(target, "utf8")).toBe("new");
+    expect(await readdir(dir)).toEqual(["campaigns.json"]);
+  });
+
+  it("gives up on any other write failure and removes the temporary file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tinymails-store-"));
+    const temporary = join(dir, "campaigns.json.tmp");
+    await writeFile(temporary, "new");
+    let attempts = 0;
+
+    await expect(replaceFile(temporary, join(dir, "campaigns.json"), async () => {
+      attempts += 1;
+      throw Object.assign(new Error("no space left"), { code: "ENOSPC" });
+    })).rejects.toThrow("no space left");
+
+    expect(attempts).toBe(1);
+    expect(await readdir(dir)).toEqual([]);
   });
 
   it("creates the application data directory with user-only permissions", async () => {

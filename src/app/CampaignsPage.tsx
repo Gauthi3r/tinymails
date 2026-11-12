@@ -16,7 +16,11 @@ export function CampaignsPage({ api }: { api: AppApi }) {
   const [composing, setComposing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
-  const hasRunningCampaign = campaigns?.some((campaign) => campaign.status === "running") ?? false;
+  const running = campaigns?.filter((campaign) => campaign.status === "running") ?? [];
+  // A campaign that is sending changes every few seconds; one that waits for tomorrow does not.
+  const refreshMilliseconds = running.length === 0
+    ? null
+    : running.some((campaign) => !campaign.waitingReason) ? 2_000 : 15_000;
 
   useEffect(() => {
     let active = true;
@@ -34,12 +38,12 @@ export function CampaignsPage({ api }: { api: AppApi }) {
   }, [api]);
 
   useEffect(() => {
-    if (!hasRunningCampaign) return;
+    if (refreshMilliseconds === null) return;
     const interval = window.setInterval(() => {
       void api.getCampaigns().then(setCampaigns).catch(() => undefined);
-    }, 2_000);
+    }, refreshMilliseconds);
     return () => window.clearInterval(interval);
-  }, [api, hasRunningCampaign]);
+  }, [api, refreshMilliseconds]);
 
   async function changeStatus(campaign: Campaign, action: "start" | "pause") {
     setActionId(campaign.id);
@@ -132,6 +136,7 @@ export function CampaignsPage({ api }: { api: AppApi }) {
             const sent = campaign.recipients.filter((recipient) => recipient.status === "sent").length;
             const failed = campaign.recipients.filter((recipient) => recipient.status === "failed").length;
             const expanded = expandedId === campaign.id;
+            const waiting = campaign.status === "running" && Boolean(campaign.waitingReason);
             return (
               <div key={campaign.id}>
                 <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
@@ -145,12 +150,17 @@ export function CampaignsPage({ api }: { api: AppApi }) {
                     {expanded ? <ChevronUp className="size-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="size-4 shrink-0 text-muted-foreground" />}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{campaign.name}</span>
-                      <span className="mt-0.5 block text-xs capitalize text-muted-foreground">
-                        {campaign.status} · {sent}/{campaign.recipients.length} sent{failed ? ` · ${failed} failed` : ""}
+                      <span className="mt-0.5 block text-xs text-muted-foreground first-letter:uppercase">
+                        {waiting ? "waiting" : campaign.status} · {sent}/{campaign.recipients.length} sent{failed ? ` · ${failed} failed` : ""}
                       </span>
                       {campaign.status === "paused" && campaign.pauseReason ? (
                         <span className="mt-1 block truncate text-xs text-muted-foreground">
                           {campaign.pauseReason}
+                        </span>
+                      ) : null}
+                      {waiting ? (
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">
+                          {waitingLine(campaign)}
                         </span>
                       ) : null}
                     </span>
@@ -182,6 +192,27 @@ export function CampaignsPage({ api }: { api: AppApi }) {
       ) : null}
     </PageFrame>
   );
+}
+
+/** When an email left, in the reader's own time zone and format. */
+function sentTime(sentAt: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(sentAt));
+}
+
+/** Why a running campaign is idle, and when it carries on by itself. */
+function waitingLine(campaign: Campaign): string {
+  if (!campaign.resumesAt) return campaign.waitingReason ?? "";
+  const resumes = new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(campaign.resumesAt));
+  return `${campaign.waitingReason} It continues on its own, ${resumes}.`;
 }
 
 function upsertCampaign(current: Campaign[] | null, campaign: Campaign): Campaign[] {
@@ -238,7 +269,7 @@ function CampaignDetail({ campaign, stopping, onStop }: {
               <tr key={recipient.email} className="border-t border-border">
                 <td className="px-3 py-2.5">{recipient.email}</td>
                 <td className="px-3 py-2.5 capitalize">{recipient.status}</td>
-                <td className="max-w-72 truncate px-3 py-2.5 text-muted-foreground">{recipient.error ?? recipient.sentAt ?? "Waiting"}</td>
+                <td className="max-w-72 truncate px-3 py-2.5 text-muted-foreground">{recipient.error ?? (recipient.sentAt ? sentTime(recipient.sentAt) : "Waiting")}</td>
               </tr>
             ))}
           </tbody>

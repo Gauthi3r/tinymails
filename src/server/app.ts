@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { createCampaign, renderMessage } from "../domain/campaigns";
+import { createCampaign, renderMessage, withoutWait } from "../domain/campaigns";
 import { normalizeEmail } from "../domain/email";
 import { indexLeadStatuses, mergeLeads } from "../domain/leads";
 import type { Account, ContactInput, ContactList, LeadStatus } from "../domain/types";
@@ -11,6 +11,7 @@ import {
   type GoogleOAuthStatus,
 } from "../gmail/google-oauth";
 import { OAuthClientValidationError } from "../gmail/oauth-client";
+import { mountMcp } from "../mcp/http";
 import { CampaignRunner } from "./campaign-runner";
 import type { Repositories } from "./repositories";
 
@@ -27,6 +28,10 @@ export interface AppDependencies {
   dataDir: string;
   oauth?: GoogleOAuthCoordinator;
   oauthRedirectUri?: string;
+  /** Supplied by the server entry so it can resume waiting campaigns on a timer. */
+  runner?: CampaignRunner;
+  /** Absolute path of scripts/mcp.mjs, shown in Settings for agents that start a command. */
+  mcpBridgePath?: string;
   clock?: () => Date;
   version?: string;
 }
@@ -38,7 +43,7 @@ export function createApp(dependencies: AppDependencies) {
   const app = express();
   const clock = dependencies.clock ?? (() => new Date());
   const version = dependencies.version ?? APP_VERSION;
-  const runner = new CampaignRunner({
+  const runner = dependencies.runner ?? new CampaignRunner({
     campaigns: dependencies.repositories.campaigns,
     accounts: dependencies.repositories.accounts,
     suppression: dependencies.repositories.suppression,
@@ -49,6 +54,8 @@ export function createApp(dependencies: AppDependencies) {
   app.disable("x-powered-by");
   app.use(localRequestGuard);
   app.use(express.json({ limit: "12mb" }));
+
+  mountMcp(app, version);
 
   app.get("/api/health", (_request, response) => {
     response.json({ ok: true, product: "TinyMails", version });
@@ -416,7 +423,7 @@ export function createApp(dependencies: AppDependencies) {
         if (record.status !== "running") {
           throw new ConflictError("Only a running campaign can be paused.");
         }
-        return { ...record, status: "paused", pauseReason: "Paused manually." };
+        return { ...withoutWait(record), status: "paused", pauseReason: "Paused manually." };
       },
     );
     if (!campaign) {
@@ -499,7 +506,17 @@ export function createApp(dependencies: AppDependencies) {
       dataDir: dependencies.dataDir,
       version,
       suppressionCount: (await dependencies.repositories.suppression.list()).length,
+      ...(await dependencies.repositories.settings.read()),
+      ...(dependencies.mcpBridgePath ? { mcpBridgePath: dependencies.mcpBridgePath } : {}),
     });
+  }));
+
+  app.post("/api/settings", asyncRoute(async (request, response) => {
+    const body = objectBody(request.body);
+    if (typeof body.agentsCanStart !== "boolean") {
+      throw new PublicError("Choose whether agents can start campaigns.");
+    }
+    response.json(await dependencies.repositories.settings.update({ agentsCanStart: body.agentsCanStart }));
   }));
 
   app.get("/api/backup", asyncRoute(async (_request, response) => {
@@ -530,7 +547,11 @@ export function createApp(dependencies: AppDependencies) {
       });
   }));
 
-  app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+  app.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
+    if (response.headersSent) {
+      next(error);
+      return;
+    }
     if (isPayloadTooLarge(error)) {
       response.status(413).json({ error: "That request is larger than TinyMails' 12 MB local limit." });
       return;

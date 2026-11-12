@@ -139,7 +139,36 @@ describe("campaign rules", () => {
       status: "failed",
       error: "Delivery result is unknown. Check Gmail Sent before retrying.",
     });
+    expect(recovered.pauseReason).toBe("Delivery result is unknown. Check Gmail Sent before retrying.");
     expect(campaign.recipients[0].status).toBe("sending");
+  });
+
+  it("brings a waiting campaign back paused after restart, with the reason", () => {
+    const campaign: Campaign = {
+      ...baseCampaign([{ email: "ada@example.com", accountId: "account-1", status: "pending" }]),
+      status: "running",
+      waitingReason: "The Gmail account's daily cap has been reached.",
+      resumesAt: "2026-08-30T09:00:00.000Z",
+    };
+
+    const [recovered] = recoverInterruptedCampaigns([campaign]);
+
+    expect(recovered).toMatchObject({
+      status: "paused",
+      pauseReason: "TinyMails was restarted. Press Start to continue.",
+    });
+    expect(recovered).not.toHaveProperty("waitingReason");
+    expect(recovered).not.toHaveProperty("resumesAt");
+  });
+
+  it("leaves a campaign that was not running untouched after restart", () => {
+    const campaign: Campaign = {
+      ...baseCampaign([{ email: "ada@example.com", accountId: "account-1", status: "pending" }]),
+      status: "paused",
+      pauseReason: "Paused manually.",
+    };
+
+    expect(recoverInterruptedCampaigns([campaign])).toEqual([campaign]);
   });
 });
 
