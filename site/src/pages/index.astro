@@ -50,9 +50,34 @@ const paceRows = rowsAt(capSent, 5, 3);
 
 const title = "TinyMails - A Gmail outbox for your agent";
 const description =
-  "TinyMails is a local, open-source Gmail outbox: your agent queues a small campaign on your computer, you read the test and press Start.";
-const origin = "https://tinymails.com";
+  "TinyMails is a local, open-source Gmail outbox for AI agents. Your agent queues a campaign over MCP, you press Start, and Gmail sends it under a daily cap.";
+// The address in astro.config.mjs: the www host, which the bare domain redirects to.
+const origin = Astro.site!.origin;
 const github = "https://github.com/Gauthi3r/tinymails";
+const imageAlt = "A Gmail outbox for your agent: an agent's queued emails pass through the TinyMails window to Gmail, one at a time.";
+// What search engines read about the page: the site and the program it describes.
+const structured = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "WebSite", "@id": `${origin}/#website`, url: `${origin}/`, name: "TinyMails", description, inLanguage: "en" },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${origin}/#software`,
+      name: "TinyMails",
+      description,
+      url: `${origin}/`,
+      image: `${origin}/og.png`,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "macOS, Windows, Linux",
+      softwareVersion: version,
+      license: "https://www.gnu.org/licenses/agpl-3.0.html",
+      isAccessibleForFree: true,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      downloadUrl: github,
+      sameAs: [github],
+    },
+  ],
+};
 const prompt = promptText.trim();
 // Light code colouring for the prompt panel (the copy button copies the file's own text). The
 // <angle> fill-ins are the values the agent supplies, set apart from the literal JSON.
@@ -144,25 +169,30 @@ const bar = `<div class="tm-win__bar"><span class="tm-dots"><i></i><i></i><i></i
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={`${origin}/`} />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="theme-color" content="#2a62ea" />
     <meta name="site-kind" content="software" />
     <meta name="page-type" content="software" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="96x96" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="TinyMails" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={`${origin}/`} />
     <meta property="og:image" content={`${origin}/og.png`} />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="TinyMails, a Gmail outbox for your agent: the TinyMails window sending a small campaign one message at a time." />
+    <meta property="og:image:alt" content={imageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={`${origin}/og.png`} />
+    <meta name="twitter:image:alt" content={imageAlt} />
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(structured)} />
     <link rel="preload" href={manropeUrl} as="font" type="font/woff2" crossorigin />
     <style set:html={`
       @font-face { font-family: "Manrope"; font-style: normal; font-display: swap; font-weight: 200 800; src: url(${manropeUrl}) format("woff2"); }

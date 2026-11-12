@@ -93,9 +93,14 @@ strings and the real default run. Do not add features, integrations or agent
 products that do not exist.
 
 `public/agent-guide.md` and `src/content/agent-prompt.txt` are the agent guide
-and the prompt the main button copies. `public/og.png`, `public/favicon.png` and
-`public/apple-touch-icon.png` were rendered with headless Chrome from
-`brand/og.html` and `brand/icon.html`.
+and the prompt the main button copies. The icons (`public/favicon.ico`,
+`public/favicon.png`, `public/apple-touch-icon.png`) and the link preview
+(`public/og.png`) are made by `node brand/render.mjs` after a build: the icons
+from `brand/logo.png`, the preview by photographing the built page's own hero and sky
+with headless Chrome under `brand/og.css`. Run it again when the hero changes.
+
+`public/robots.txt` and `public/sitemap.xml` name the one page. The page's
+address is set once, as `site` in `astro.config.mjs`.
 
 ## Design kit
 

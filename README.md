@@ -1,12 +1,27 @@
-# TinyMails
+<p align="center">
+  <a href="https://www.tinymails.com/"><img src="src/assets/tinymails-logo.png" alt="TinyMails logo" width="96" height="96"></a>
+</p>
+
+<h1 align="center">TinyMails</h1>
+
+<p align="center">
+  <a href="https://www.tinymails.com/"><b>tinymails.com</b></a> ·
+  <a href="#run-it-locally">Install</a> ·
+  <a href="#connect-an-agent">Connect an agent</a> ·
+  <a href="site/public/agent-guide.md">Guide for agents</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Gauthi3r/tinymails/actions/workflows/ci.yml"><img src="https://github.com/Gauthi3r/tinymails/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="https://github.com/Gauthi3r/tinymails/releases/latest"><img src="https://img.shields.io/github/v/release/Gauthi3r/tinymails" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Gauthi3r/tinymails" alt="License"></a>
+</p>
 
 **A Gmail outbox for your agent.** TinyMails runs on your computer. Your AI agent queues a small email campaign over MCP, you read the test and press Start, and Gmail sends it one message at a time under a daily cap.
 
 It is open source, has no cloud service, and keeps contacts, templates, sending history, and Google credentials on your machine.
 
 ![The TinyMails campaigns page: a campaign waiting at 25 of 40 sent because the daily cap was reached, with the time it continues on its own, above a paused campaign with a Start button](docs/images/campaign-waiting.png)
-
-Website: [tinymails.vercel.app](https://tinymails.vercel.app) · Guide for agents: [agent-guide.md](site/public/agent-guide.md)
 
 ## How it works
 
