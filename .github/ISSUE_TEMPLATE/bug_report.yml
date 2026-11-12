@@ -27,7 +27,7 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Import examples/contacts.csv
+        1. Import docs/examples/contacts.csv
         2. Create a campaign
         3. ...
     validations:

@@ -19,7 +19,7 @@ The tests cover local-request Host and Origin enforcement, single-process data-d
 
 The public scanner checks tracked source and documentation for credential artifacts, non-example addresses, runtime data, and token-shaped values. Private migration terms are supplied only through the untracked `TINYMAILS_PRIVATE_TERMS` environment variable when needed; the repository does not publish hashes of those terms.
 
-The repository uses AGPL-3.0-only. Adapted OA interface recipes retain the upstream Voprex Labs MIT notice and full license text in `NOTICE.md`.
+The repository uses AGPL-3.0-only. Adapted OA interface recipes retain the upstream Voprex Labs MIT notice and full license text in `docs/NOTICE.md`.
 
 ## Platform boundary
 

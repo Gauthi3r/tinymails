@@ -19,8 +19,8 @@
   "scripts": {
     "start": "node scripts/launch.mjs",
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
     "serve": "tsx src/server/index.ts",
     "mcp": "node scripts/mcp.mjs",
     "lint": "oxlint . --ignore-pattern \"site/public/assets/**\"",
