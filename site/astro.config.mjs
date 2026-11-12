@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import { aliases } from "./aliases.mjs";
 
 export default defineConfig({
-  site: "https://tinymails.com",
+  site: "https://www.tinymails.com",
   output: "static",
   trailingSlash: "ignore",
   build: { inlineStylesheets: "always" },

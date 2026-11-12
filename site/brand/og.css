@@ -1,0 +1,16 @@
+/* Laid over the built home page by render.mjs to frame its hero as a 1200 by 630 link preview:
+   the name and the logo, the headline, and the product window running off the bottom edge. */
+html, body { overflow: hidden; }
+main > :not(.tm-hero), footer, .tm-sky, .skip-link,
+.nav__links, .nav__actions, .nav__toggle, .tm-nav__shape,
+.hero__lead, .tm-hero .btn-row, .tm-facts { display: none !important; }
+
+.tm-nav { padding-top: 14px; }
+.nav__logo { gap: 14px; }
+.nav__logo .tm-mark { display: none; }
+.nav__logo::before { content: ""; width: 48px; height: 48px; border-radius: 13px; background: #fff url(/apple-touch-icon.png) center / 100%; box-shadow: 0 6px 16px -6px rgb(8 30 100 / 45%); }
+.nav__logo .tm-name { font-size: 30px; }
+
+.tm-hero { padding-top: 124px !important; height: 800px !important; max-height: none !important; }
+.tm-hero h1 { font-size: 82px; }
+.tm-hero.hero--centred .hero__window.tm-stage { margin-top: 30px; flex: none; height: 440px; }
