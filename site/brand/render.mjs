@@ -93,12 +93,14 @@ async function preview() {
   const shot = join(scratch, "og.png");
   try {
     await promisify(execFile)(chrome, [
-      "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-prefers-reduced-motion",
+      "--headless=new", "--hide-scrollbars", "--force-prefers-reduced-motion",
       `--user-data-dir=${join(scratch, "profile")}`,
-      "--window-size=1200,630", "--force-device-scale-factor=2", "--virtual-time-budget=6000",
+      "--window-size=1200,900", "--force-device-scale-factor=1", "--virtual-time-budget=6000",
       `--screenshot=${shot}`, `http://127.0.0.1:${server.address().port}/og`,
     ]);
-    await sharp(shot).resize(1200, 630).png({ compressionLevel: 9 }).toFile(join(out, "og.png"));
+    // og.css sets the page 270 lower in a 900 tall window: keep the lower 630. The shot is taken at
+    // the picture's own size, because resizing would blur the sky's dots.
+    await sharp(shot).extract({ left: 0, top: 270, width: 1200, height: 630 }).png({ compressionLevel: 9 }).toFile(join(out, "og.png"));
   } finally {
     server.close();
     await rm(scratch, { recursive: true, force: true });

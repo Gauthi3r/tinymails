@@ -96,7 +96,7 @@ products that do not exist.
 and the prompt the main button copies. The icons (`public/favicon.ico`,
 `public/favicon.png`, `public/apple-touch-icon.png`) and the link preview
 (`public/og.png`) are made by `node brand/render.mjs` after a build: the icons
-from `brand/logo.png`, the preview by photographing the built page's own hero
+from `brand/logo.png`, the preview by photographing the built page's own hero and sky
 with headless Chrome under `brand/og.css`. Run it again when the hero changes.
 
 `public/robots.txt` and `public/sitemap.xml` name the one page. The page's

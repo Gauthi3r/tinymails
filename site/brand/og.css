@@ -1,16 +1,21 @@
 /* Laid over the built home page by render.mjs to frame its hero as a 1200 by 630 link preview:
-   the name and the logo, the headline, and the product window running off the bottom edge. */
+   the logo, the headline, and the product window running off the bottom edge, on the page's own sky.
+   The sky gathers its clouds in the lower part of the screen, so the page is photographed 900 tall,
+   everything is set 270 lower, and render.mjs keeps the lower 630. */
 html, body { overflow: hidden; }
-main > :not(.tm-hero), footer, .tm-sky, .skip-link,
-.nav__links, .nav__actions, .nav__toggle, .tm-nav__shape,
+.tm-nav, main { transform: translateY(270px); }
+/* The later sections stay in the page, unseen and far below: the sky picks its scene from where they
+   are, and would turn to the last one's dusk if they were gone. */
+main > :not(.tm-hero), footer { visibility: hidden !important; }
+.skip-link,
+.nav__links, .nav__actions, .nav__toggle, .tm-nav__shape, .nav__logo .tm-mark, .nav__logo .tm-name,
 .hero__lead, .tm-hero .btn-row, .tm-facts { display: none !important; }
 
-.tm-nav { padding-top: 14px; }
-.nav__logo { gap: 14px; }
-.nav__logo .tm-mark { display: none; }
-.nav__logo::before { content: ""; width: 48px; height: 48px; border-radius: 13px; background: #fff url(/apple-touch-icon.png) center / 100%; box-shadow: 0 6px 16px -6px rgb(8 30 100 / 45%); }
-.nav__logo .tm-name { font-size: 30px; }
+/* the logo alone, on its white tile, centred above the headline */
+.tm-nav { padding-top: 22px; }
+.tm-nav .nav__bar { display: flex !important; justify-content: center !important; }
+.nav__logo::before { content: ""; width: 68px; height: 68px; border-radius: 18px; background: #fff url(/apple-touch-icon.png) center / 100%; box-shadow: 0 10px 24px -10px rgb(8 30 100 / 55%); }
 
-.tm-hero { padding-top: 124px !important; height: 800px !important; max-height: none !important; }
+.tm-hero { padding-top: 128px !important; height: 1100px !important; max-height: none !important; }
 .tm-hero h1 { font-size: 82px; }
 .tm-hero.hero--centred .hero__window.tm-stage { margin-top: 30px; flex: none; height: 440px; }
