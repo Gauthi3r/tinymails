@@ -1,5 +1,5 @@
 /* Laid over the built home page by render.mjs to frame its hero as a 1200 by 630 link preview:
-   the logo, the headline, and the product window running off the bottom edge, on the page's own sky.
+   the logo in a notch, the headline, and the product window running off the bottom edge, on the page's own sky.
    The sky gathers its clouds in the lower part of the screen, so the page is photographed 900 tall,
    everything is set 270 lower, and render.mjs keeps the lower 630. */
 html, body { overflow: hidden; }
@@ -11,11 +11,16 @@ main > :not(.tm-hero), footer { visibility: hidden !important; }
 .nav__links, .nav__actions, .nav__toggle, .tm-nav__shape, .nav__logo .tm-mark, .nav__logo .tm-name,
 .hero__lead, .tm-hero .btn-row, .tm-facts { display: none !important; }
 
-/* the logo alone, on its white tile, centred above the headline */
-.tm-nav { padding-top: 22px; }
-.tm-nav .nav__bar { display: flex !important; justify-content: center !important; }
-.nav__logo::before { content: ""; width: 68px; height: 68px; border-radius: 18px; background: #fff url(/apple-touch-icon.png) center / 100%; box-shadow: 0 10px 24px -10px rgb(8 30 100 / 55%); }
+/* the logo alone, in a white notch that hangs from the top edge like the one on a Mac's screen:
+   square where it meets the edge, with a small outward curve each side, and rounded below */
+.nav__logo {
+  position: fixed; top: 0; left: 50%; width: 176px; height: 50px; margin-left: -88px;
+  border-radius: 0 0 18px 18px; background: #fff url(/favicon.png) center / 44px auto no-repeat;
+}
+.nav__logo::before, .nav__logo::after { content: ""; position: absolute; top: 0; width: 12px; height: 12px; }
+.nav__logo::before { right: 100%; background: radial-gradient(circle at 0 100%, transparent 11.5px, #fff 12px); }
+.nav__logo::after { left: 100%; background: radial-gradient(circle at 100% 100%, transparent 11.5px, #fff 12px); }
 
-.tm-hero { padding-top: 128px !important; height: 1100px !important; max-height: none !important; }
+.tm-hero { padding-top: 104px !important; height: 1100px !important; max-height: none !important; }
 .tm-hero h1 { font-size: 82px; }
-.tm-hero.hero--centred .hero__window.tm-stage { margin-top: 30px; flex: none; height: 440px; }
+.tm-hero.hero--centred .hero__window.tm-stage { margin-top: 30px; flex: none; height: 470px; }

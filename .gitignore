@@ -13,3 +13,4 @@ credentials.json
 credentials.enc
 .encryption_key
 /*.csv
+.DS_Store
